@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
 using Village.Api.Extensions;
+using Village.Api.Hubs;
+using Village.Api.Modules;
 using Village.Api.Services;
 using Village.Infrastructure.Data;
 
@@ -18,6 +20,9 @@ builder.Services.AddDbContext<VillageDbContext>(options =>
 // Auth
 builder.Services.AddVillageAuth(builder.Configuration);
 builder.Services.AddSingleton<IJwtService, JwtService>();
+
+// Notifications
+builder.Services.AddScoped<NotificationService>();
 
 // Carter modules
 builder.Services.AddCarter();
@@ -66,6 +71,7 @@ app.MapCarter();
 app.MapHub<Village.Api.Hubs.FamilyHub>("/hubs/family");
 app.MapHub<Village.Api.Hubs.ChoreHub>("/hubs/chores");
 app.MapHub<Village.Api.Hubs.PointsHub>("/hubs/points");
+app.MapHub<Village.Api.Hubs.NotificationsHub>("/hubs/notifications");
 
 // Health check
 app.MapGet("/health", () => Results.Ok(new

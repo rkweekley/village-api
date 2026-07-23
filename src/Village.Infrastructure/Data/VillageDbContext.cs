@@ -20,6 +20,7 @@ public class VillageDbContext : DbContext
     public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
     public DbSet<ShoppingListItem> ShoppingListItems => Set<ShoppingListItem>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -185,6 +186,26 @@ public class VillageDbContext : DbContext
             e.HasKey(a => a.Id);
             e.HasIndex(a => new { a.FamilyId, a.CreatedAt });
             e.Property(a => a.Changes).HasColumnType("jsonb");
+        });
+
+        // Notification
+        modelBuilder.Entity<Notification>(e =>
+        {
+            e.HasKey(n => n.Id);
+            e.Property(n => n.Type).HasMaxLength(30).IsRequired();
+            e.Property(n => n.Priority).HasMaxLength(10).IsRequired();
+            e.Property(n => n.Title).HasMaxLength(200).IsRequired();
+            e.Property(n => n.Body).HasMaxLength(2000);
+            e.Property(n => n.ReferenceId).HasMaxLength(50);
+            e.Property(n => n.ReferenceType).HasMaxLength(30);
+
+            e.HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(n => new { n.UserId, n.IsRead });
+            e.HasIndex(n => n.CreatedAt);
         });
     }
 }
