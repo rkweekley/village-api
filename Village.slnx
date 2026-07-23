@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Village.Api/Village.Api.csproj" />
+    <Project Path="src/Village.Application/Village.Application.csproj" />
+    <Project Path="src/Village.Domain/Village.Domain.csproj" />
+    <Project Path="src/Village.Infrastructure/Village.Infrastructure.csproj" />
+    <Project Path="src/Village.Shared/Village.Shared.csproj" />
+    <Project Path="src/Village.Workers/Village.Workers.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Village.Api.Tests/Village.Api.Tests.csproj" />
+    <Project Path="tests/Village.Application.Tests/Village.Application.Tests.csproj" />
+    <Project Path="tests/Village.IntegrationTests/Village.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

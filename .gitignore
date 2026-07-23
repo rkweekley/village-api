@@ -1,0 +1,22 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.sln.docstate
+.DS_Store
+.vs/
+*.DotSettings.user
+
+# Docker
+.env
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+
+# OS
+Thumbs.db
