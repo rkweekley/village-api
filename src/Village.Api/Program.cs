@@ -30,14 +30,15 @@ builder.Services.AddSignalR()
 // OpenAPI
 builder.Services.AddOpenApi();
 
-// CORS (dev)
+// CORS (dev — specific origin needed for SignalR credentials)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Dev", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins("http://localhost:5173", "http://localhost:3000", "http://localhost:8080")
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
@@ -60,6 +61,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapCarter();
+
+// SignalR hubs
+app.MapHub<Village.Api.Hubs.FamilyHub>("/hubs/family");
+app.MapHub<Village.Api.Hubs.ChoreHub>("/hubs/chores");
+app.MapHub<Village.Api.Hubs.PointsHub>("/hubs/points");
 
 // Health check
 app.MapGet("/health", () => Results.Ok(new
