@@ -1,6 +1,8 @@
 using Carter;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using Village.Api.Extensions;
+using Village.Api.Hubs;
 using Village.Domain.Entities;
 using Village.Infrastructure.Data;
 
@@ -189,6 +191,7 @@ public class ChoresModule : ICarterModule
             AssignChoreRequest request,
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<ChoreHub> choreHub,
             CancellationToken ct) =>
         {
             var familyId = httpContext.User.GetFamilyId();
@@ -211,6 +214,17 @@ public class ChoresModule : ICarterModule
             db.ChoreAssignments.Add(assignment);
             await db.SaveChangesAsync(ct);
 
+            // Real-time notification
+            _ = choreHub.NotifyChoreGroup(familyId.Value.ToString(), HubMethods.ChoreAssigned, new
+            {
+                assignment.Id,
+                assignment.ChoreId,
+                chore.Name,
+                chore.PointValue,
+                assignment.AssignedToId,
+                assignment.DueDate
+            });
+
             return Results.Created($"/api/chores/assignments/{assignment.Id}", new
             {
                 assignment.Id,
@@ -227,6 +241,8 @@ public class ChoresModule : ICarterModule
             CompleteChoreRequest request,
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<ChoreHub> choreHub,
+            IHubContext<PointsHub> pointsHub,
             CancellationToken ct) =>
         {
             var userId = httpContext.User.GetUserId();
@@ -234,6 +250,7 @@ public class ChoresModule : ICarterModule
 
             var assignment = await db.ChoreAssignments
                 .Include(a => a.Chore)
+                .Include(a => a.AssignedTo)
                 .FirstOrDefaultAsync(a => a.Id == assignmentId, ct);
             if (assignment == null) return Results.NotFound();
 
@@ -285,9 +302,30 @@ public class ChoresModule : ICarterModule
                     Note = $"Completed: {assignment.Chore.Name}",
                     CreatedAt = DateTime.UtcNow
                 });
+
+                // Real-time: points updated
+                _ = pointsHub.NotifyPointsGroup(user.FamilyId.ToString(), HubMethods.PointsUpdated, new
+                {
+                    userId = userId.Value,
+                    displayName = assignment.AssignedTo.DisplayName,
+                    pointsAwarded = assignment.Chore.PointValue,
+                    newBalance = user.PointsBalance,
+                    reason = $"Completed: {assignment.Chore.Name}"
+                });
             }
 
             await db.SaveChangesAsync(ct);
+
+            // Real-time: chore completed
+            _ = choreHub.NotifyChoreGroup(assignment.Chore.FamilyId.ToString(), HubMethods.ChoreCompleted, new
+            {
+                assignment.Id,
+                assignment.ChoreId,
+                choreName = assignment.Chore.Name,
+                completedById = userId.Value,
+                requiresApproval = assignment.Chore.RequiresApproval,
+                approvalStatus = completion.ApprovalStatus.ToString()
+            });
 
             return Results.Ok(new
             {
@@ -304,6 +342,8 @@ public class ChoresModule : ICarterModule
             ApproveCompletionRequest request,
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<ChoreHub> choreHub,
+            IHubContext<PointsHub> pointsHub,
             CancellationToken ct) =>
         {
             var userId = httpContext.User.GetUserId();
@@ -314,8 +354,11 @@ public class ChoresModule : ICarterModule
             var completion = await db.ChoreCompletions
                 .Include(c => c.Assignment)
                     .ThenInclude(a => a.Chore)
+                .Include(c => c.Assignment.AssignedTo)
                 .FirstOrDefaultAsync(c => c.Id == completionId, ct);
             if (completion == null) return Results.NotFound();
+
+            var familyId = completion.Assignment.Chore.FamilyId;
 
             completion.ApprovedById = userId.Value;
             completion.ApprovedAt = DateTime.UtcNow;
@@ -342,11 +385,38 @@ public class ChoresModule : ICarterModule
                         Note = $"Rejected: {completion.Assignment.Chore.Name}",
                         CreatedAt = DateTime.UtcNow
                     });
+
+                    // Real-time: points reversed
+                    _ = pointsHub.NotifyPointsGroup(familyId.ToString(), HubMethods.PointsUpdated, new
+                    {
+                        userId = assignedUser.Id,
+                        displayName = assignedUser.DisplayName,
+                        pointsAwarded = -completion.PointsAwarded,
+                        newBalance = assignedUser.PointsBalance,
+                        reason = $"Rejected: {completion.Assignment.Chore.Name}"
+                    });
                 }
 
                 // Re-open assignment
                 completion.Assignment.Status = ChoreStatus.Pending;
                 completion.Assignment.CompletedAt = null;
+
+                _ = choreHub.NotifyChoreGroup(familyId.ToString(), HubMethods.ChoreRejected, new
+                {
+                    assignmentId = completion.Assignment.Id,
+                    choreName = completion.Assignment.Chore.Name,
+                    completedById = completion.Assignment.AssignedToId
+                });
+            }
+            else
+            {
+                _ = choreHub.NotifyChoreGroup(familyId.ToString(), HubMethods.ChoreApproved, new
+                {
+                    assignmentId = completion.Assignment.Id,
+                    choreName = completion.Assignment.Chore.Name,
+                    pointsAwarded = completion.PointsAwarded,
+                    completedById = completion.Assignment.AssignedToId
+                });
             }
 
             await db.SaveChangesAsync(ct);

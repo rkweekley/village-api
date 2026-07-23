@@ -1,6 +1,8 @@
 using Carter;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using Village.Api.Extensions;
+using Village.Api.Hubs;
 using Village.Domain.Entities;
 using Village.Infrastructure.Data;
 
@@ -173,6 +175,8 @@ public class RewardsModule : ICarterModule
             Guid rewardId,
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<PointsHub> pointsHub,
+            IHubContext<ChoreHub> choreHub,
             CancellationToken ct) =>
         {
             var userId = httpContext.User.GetUserId();
@@ -235,6 +239,27 @@ public class RewardsModule : ICarterModule
 
             await db.SaveChangesAsync(ct);
 
+            // Real-time notifications
+            _ = pointsHub.NotifyPointsGroup(familyId.Value.ToString(), HubMethods.PointsUpdated, new
+            {
+                userId = userId.Value,
+                displayName = user.DisplayName,
+                pointsAwarded = -reward.PointCost,
+                newBalance = user.PointsBalance,
+                reason = $"Redeemed: {reward.Name}"
+            });
+
+            _ = pointsHub.NotifyPointsGroup(familyId.Value.ToString(), HubMethods.RewardRedeemed, new
+            {
+                redemption.Id,
+                rewardId,
+                rewardName = reward.Name,
+                userId = userId.Value,
+                pointsCost = reward.PointCost,
+                requiresApproval = reward.RequiresApproval,
+                status = redemption.Status.ToString()
+            });
+
             return Results.Ok(new
             {
                 redemption.Id,
@@ -251,6 +276,7 @@ public class RewardsModule : ICarterModule
             ApproveRedemptionRequest request,
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<PointsHub> pointsHub,
             CancellationToken ct) =>
         {
             var userId = httpContext.User.GetUserId();
@@ -260,6 +286,7 @@ public class RewardsModule : ICarterModule
 
             var redemption = await db.RewardRedemptions
                 .Include(r => r.Reward)
+                .Include(r => r.User)
                 .FirstOrDefaultAsync(r => r.Id == redemptionId, ct);
             if (redemption == null) return Results.NotFound();
 
@@ -287,7 +314,33 @@ public class RewardsModule : ICarterModule
                         Note = $"Refund: {redemption.Reward.Name}",
                         CreatedAt = DateTime.UtcNow
                     });
+
+                    _ = pointsHub.NotifyPointsGroup(user.FamilyId.ToString(), HubMethods.PointsUpdated, new
+                    {
+                        userId = user.Id,
+                        displayName = user.DisplayName,
+                        pointsAwarded = redemption.PointsCost,
+                        newBalance = user.PointsBalance,
+                        reason = $"Refund: {redemption.Reward.Name}"
+                    });
                 }
+
+                _ = pointsHub.NotifyPointsGroup(redemption.Reward.FamilyId.ToString(), HubMethods.RewardRejected, new
+                {
+                    redemptionId = redemption.Id,
+                    rewardName = redemption.Reward.Name,
+                    userId = redemption.UserId
+                });
+            }
+            else
+            {
+                _ = pointsHub.NotifyPointsGroup(redemption.Reward.FamilyId.ToString(), HubMethods.RewardApproved, new
+                {
+                    redemptionId = redemption.Id,
+                    rewardName = redemption.Reward.Name,
+                    userId = redemption.UserId,
+                    pointsCost = redemption.PointsCost
+                });
             }
 
             await db.SaveChangesAsync(ct);
