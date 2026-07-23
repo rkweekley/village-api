@@ -1,5 +1,8 @@
+using System.Text.Json.Serialization;
+
 namespace Village.Domain.Entities;
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum NotificationType
 {
     ChoreAssigned,
@@ -14,6 +17,7 @@ public enum NotificationType
     System
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum NotificationPriority
 {
     Low,
