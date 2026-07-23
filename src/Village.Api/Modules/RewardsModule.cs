@@ -16,14 +16,12 @@ public class RewardsModule : ICarterModule
         {
             return Results.Ok(new { message = "Rewards API ready" });
         })
-        .WithName("GetRewards")
-        .WithOpenApi();
+        .WithName("GetRewards");
 
         group.MapPost("/", async (HttpContext context) =>
         {
             return Results.Created($"/api/v1/rewards/{Guid.NewGuid()}", new { message = "Reward created placeholder" });
         })
-        .WithName("CreateReward")
-        .WithOpenApi();
+        .WithName("CreateReward");
     }
 }

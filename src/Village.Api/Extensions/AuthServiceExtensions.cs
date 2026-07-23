@@ -1,5 +1,3 @@
-// ASP.NET Core Identity + JWT configuration placeholder
-// This file will be expanded in Sprint 1 during auth implementation
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -49,6 +47,8 @@ public static class AuthServiceExtensions
                 }
             };
         });
+
+        services.AddAuthorization();
 
         return services;
     }

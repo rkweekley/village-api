@@ -16,14 +16,12 @@ public class FamiliesModule : ICarterModule
         {
             return Results.Ok(new { id, message = "Family detail placeholder" });
         })
-        .WithName("GetFamily")
-        .WithOpenApi();
+        .WithName("GetFamily");
 
         group.MapPost("/", async (HttpContext context) =>
         {
             return Results.Created($"/api/v1/families/{Guid.NewGuid()}", new { message = "Family created placeholder" });
         })
-        .WithName("CreateFamily")
-        .WithOpenApi();
+        .WithName("CreateFamily");
     }
 }

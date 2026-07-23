@@ -16,21 +16,18 @@ public class ChoresModule : ICarterModule
         {
             return Results.Ok(new { message = "Chores API ready" });
         })
-        .WithName("GetChores")
-        .WithOpenApi();
+        .WithName("GetChores");
 
         group.MapGet("/{id:guid}", async (Guid id) =>
         {
             return Results.Ok(new { id, message = "Chore detail placeholder" });
         })
-        .WithName("GetChoreById")
-        .WithOpenApi();
+        .WithName("GetChoreById");
 
         group.MapPost("/", async (HttpContext context) =>
         {
             return Results.Created($"/api/v1/chores/{Guid.NewGuid()}", new { message = "Chore created placeholder" });
         })
-        .WithName("CreateChore")
-        .WithOpenApi();
+        .WithName("CreateChore");
     }
 }
