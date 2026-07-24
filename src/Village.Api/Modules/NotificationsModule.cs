@@ -144,8 +144,66 @@ public class NotificationsModule : CarterModule
 
             return Results.NoContent();
         });
+
+        // POST /api/notifications — create a test notification
+        group.MapPost("/", async (
+            CreateNotificationRequest request,
+            HttpContext httpContext,
+            NotificationService notificationService) =>
+        {
+            var userId = httpContext.User.GetUserId();
+            if (userId == null) return Results.Unauthorized();
+
+            // Use the request's family/user IDs if provided, otherwise use the
+            // authenticated user (for self-testing)
+            var familyId = request.FamilyId ?? Guid.Empty;
+            var targetUserId = request.UserId ?? userId.Value;
+
+            if (familyId == Guid.Empty)
+            {
+                // Look up the user's family from the DB
+                var user = await notificationService.LookupUserAsync(userId.Value);
+                if (user?.FamilyId == null) return Results.BadRequest("User has no family. Provide familyId.");
+                familyId = user.FamilyId.Value;
+            }
+
+            var notification = await notificationService.CreateAsync(
+                familyId,
+                targetUserId,
+                request.Type,
+                request.Title,
+                request.Body,
+                request.ReferenceId,
+                request.ReferenceType,
+                request.Priority
+            );
+
+            return Results.Created($"/api/notifications/{notification.Id}", new
+            {
+                notification.Id,
+                notification.Type,
+                notification.Priority,
+                notification.Title,
+                notification.Body,
+                notification.ReferenceId,
+                notification.ReferenceType,
+                notification.IsRead,
+                notification.CreatedAt
+            });
+        });
     }
 }
+
+public record CreateNotificationRequest(
+    NotificationType Type,
+    string Title,
+    string? Body = null,
+    NotificationPriority Priority = NotificationPriority.Normal,
+    Guid? FamilyId = null,
+    Guid? UserId = null,
+    string? ReferenceId = null,
+    string? ReferenceType = null
+);
 
 /// <summary>
 /// Service for creating notifications and pushing via SignalR.
@@ -263,5 +321,13 @@ public class NotificationService
             }
             catch { }
         }
+    }
+
+    /// <summary>
+    /// Look up a user by ID (used by the test POST endpoint).
+    /// </summary>
+    public async Task<Village.Domain.Entities.User?> LookupUserAsync(Guid userId)
+    {
+        return await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
     }
 }
