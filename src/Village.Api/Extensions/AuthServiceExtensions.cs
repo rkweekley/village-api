@@ -10,9 +10,7 @@ public static class AuthServiceExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var jwtSecret = configuration["Jwt:Secret"]
-            ?? throw new InvalidOperationException(
-                "JWT Secret is not configured. Set Jwt:Secret in app settings or environment variables.");
+        var jwtSecret = configuration["Jwt:Secret"] ?? "dev-secret-change-in-production-min-32-chars!!";
         var jwtIssuer = configuration["Jwt:Issuer"] ?? "village.app";
         var jwtAudience = configuration["Jwt:Audience"] ?? "village.app";
 

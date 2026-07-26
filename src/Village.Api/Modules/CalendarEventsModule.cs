@@ -271,9 +271,9 @@ public record CreateEventRequest(
     string? Color,
     DateTime StartTime,
     DateTime EndTime,
+    bool IsAllDay = false,
     string? RecurrenceRule,
-    List<Guid>? AttendeeIds,
-    bool IsAllDay = false
+    List<Guid>? AttendeeIds
 );
 
 public record UpdateEventRequest(

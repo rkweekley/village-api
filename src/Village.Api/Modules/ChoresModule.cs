@@ -18,14 +18,12 @@ public class ChoresModule : ICarterModule
         group.MapGet("/", async (
             HttpContext httpContext,
             VillageDbContext db,
-            int? page,
-            int? pageSize,
             CancellationToken ct) =>
         {
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
-            var query = db.Chores
+            var chores = await db.Chores
                 .Where(c => c.FamilyId == familyId.Value && c.IsActive)
                 .OrderBy(c => c.SortOrder)
                 .ThenBy(c => c.Name)
@@ -40,17 +38,8 @@ public class ChoresModule : ICarterModule
                     c.RequiresApproval,
                     c.RequiresPhoto,
                     c.IsActive
-                });
-
-            // Pagination
-            if (page.HasValue || pageSize.HasValue)
-            {
-                int p = Math.Max(1, page ?? 1);
-                int ps = Math.Clamp(pageSize ?? 50, 1, 200);
-                query = query.Skip((p - 1) * ps).Take(ps);
-            }
-
-            var chores = await query.ToListAsync(ct);
+                })
+                .ToListAsync(ct);
 
             return Results.Ok(chores);
         })
@@ -65,15 +54,6 @@ public class ChoresModule : ICarterModule
         {
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
-
-            if (string.IsNullOrWhiteSpace(request.Name))
-                return Results.BadRequest(new { error = "Name is required" });
-            if (request.Name.Trim().Length > 100)
-                return Results.BadRequest(new { error = "Name must be 100 characters or less" });
-            if (request.Description?.Trim().Length > 2000)
-                return Results.BadRequest(new { error = "Description must be 2000 characters or less" });
-            if (request.PointValue <= 0)
-                return Results.BadRequest(new { error = "Point value must be positive" });
 
             var chore = new Chore
             {
@@ -118,24 +98,9 @@ public class ChoresModule : ICarterModule
                 .FirstOrDefaultAsync(c => c.Id == id && c.FamilyId == familyId.Value, ct);
             if (chore == null) return Results.NotFound();
 
-            if (request.Name != null)
-            {
-                if (request.Name.Trim().Length > 100)
-                    return Results.BadRequest(new { error = "Name must be 100 characters or less" });
-                chore.Name = request.Name.Trim();
-            }
-            if (request.Description != null)
-            {
-                if (request.Description.Trim().Length > 2000)
-                    return Results.BadRequest(new { error = "Description must be 2000 characters or less" });
-                chore.Description = request.Description.Trim();
-            }
-            if (request.PointValue.HasValue)
-            {
-                if (request.PointValue.Value <= 0)
-                    return Results.BadRequest(new { error = "Point value must be positive" });
-                chore.PointValue = request.PointValue.Value;
-            }
+            if (request.Name != null) chore.Name = request.Name.Trim();
+            if (request.Description != null) chore.Description = request.Description?.Trim();
+            if (request.PointValue.HasValue) chore.PointValue = request.PointValue.Value;
             if (request.Recurrence.HasValue) chore.Recurrence = request.Recurrence.Value;
             if (request.Difficulty.HasValue) chore.Difficulty = request.Difficulty.Value;
             if (request.RequiresApproval.HasValue) chore.RequiresApproval = request.RequiresApproval.Value;
@@ -177,15 +142,13 @@ public class ChoresModule : ICarterModule
         group.MapGet("/assignments", async (
             HttpContext httpContext,
             VillageDbContext db,
-            int? page,
-            int? pageSize,
             CancellationToken ct) =>
         {
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var query = db.ChoreAssignments
+            var assignments = await db.ChoreAssignments
                 .Include(a => a.Chore)
                 .Include(a => a.AssignedTo)
                 .Include(a => a.Completion)
@@ -215,17 +178,8 @@ public class ChoresModule : ICarterModule
                         a.Completion.CreatedAt,
                         a.Completion.ApprovedAt
                     }
-                });
-
-            // Pagination
-            if (page.HasValue || pageSize.HasValue)
-            {
-                int p = Math.Max(1, page ?? 1);
-                int ps = Math.Clamp(pageSize ?? 50, 1, 200);
-                query = query.Skip((p - 1) * ps).Take(ps);
-            }
-
-            var assignments = await query.ToListAsync(ct);
+                })
+                .ToListAsync(ct);
 
             return Results.Ok(assignments);
         })
@@ -261,7 +215,7 @@ public class ChoresModule : ICarterModule
             await db.SaveChangesAsync(ct);
 
             // Real-time notification
-            await choreHub.NotifyChoreGroup(familyId.Value.ToString(), HubMethods.ChoreAssigned, new
+            _ = choreHub.NotifyChoreGroup(familyId.Value.ToString(), HubMethods.ChoreAssigned, new
             {
                 assignment.Id,
                 assignment.ChoreId,
@@ -350,7 +304,7 @@ public class ChoresModule : ICarterModule
                 });
 
                 // Real-time: points updated
-                await pointsHub.NotifyPointsGroup(user.FamilyId.ToString(), HubMethods.PointsUpdated, new
+                _ = pointsHub.NotifyPointsGroup(user.FamilyId.ToString(), HubMethods.PointsUpdated, new
                 {
                     userId = userId.Value,
                     displayName = assignment.AssignedTo.DisplayName,
@@ -363,7 +317,7 @@ public class ChoresModule : ICarterModule
             await db.SaveChangesAsync(ct);
 
             // Real-time: chore completed
-            await choreHub.NotifyChoreGroup(assignment.Chore.FamilyId.ToString(), HubMethods.ChoreCompleted, new
+            _ = choreHub.NotifyChoreGroup(assignment.Chore.FamilyId.ToString(), HubMethods.ChoreCompleted, new
             {
                 assignment.Id,
                 assignment.ChoreId,
@@ -394,9 +348,8 @@ public class ChoresModule : ICarterModule
         {
             var userId = httpContext.User.GetUserId();
             var role = httpContext.User.GetRole();
-            var callerFamilyId = httpContext.User.GetFamilyId();
             if (userId == null) return Results.Unauthorized();
-            if (role != "Parent" || callerFamilyId == null) return Results.Forbid();
+            if (role != "Parent") return Results.Forbid();
 
             var completion = await db.ChoreCompletions
                 .Include(c => c.Assignment)
@@ -405,10 +358,7 @@ public class ChoresModule : ICarterModule
                 .FirstOrDefaultAsync(c => c.Id == completionId, ct);
             if (completion == null) return Results.NotFound();
 
-            // Verify the parent belongs to the same family as this completion
-            var completionFamilyId = completion.Assignment.Chore.FamilyId;
-            if (callerFamilyId.Value != completionFamilyId)
-                return Results.Forbid();
+            var familyId = completion.Assignment.Chore.FamilyId;
 
             completion.ApprovedById = userId.Value;
             completion.ApprovedAt = DateTime.UtcNow;
@@ -416,13 +366,12 @@ public class ChoresModule : ICarterModule
 
             if (!request.Approved)
             {
-                // Rejected — reverse points (clamped to 0)
+                // Rejected — reverse points
                 var assignedUser = await db.Users.FindAsync(
                     new object[] { completion.Assignment.AssignedToId }, ct);
                 if (assignedUser != null)
                 {
-                    assignedUser.PointsBalance = Math.Max(0,
-                        assignedUser.PointsBalance - completion.PointsAwarded);
+                    assignedUser.PointsBalance -= completion.PointsAwarded;
 
                     db.PointsTransactions.Add(new PointsTransaction
                     {
@@ -438,7 +387,7 @@ public class ChoresModule : ICarterModule
                     });
 
                     // Real-time: points reversed
-                    await pointsHub.NotifyPointsGroup(completionFamilyId.ToString(), HubMethods.PointsUpdated, new
+                    _ = pointsHub.NotifyPointsGroup(familyId.ToString(), HubMethods.PointsUpdated, new
                     {
                         userId = assignedUser.Id,
                         displayName = assignedUser.DisplayName,
@@ -452,7 +401,7 @@ public class ChoresModule : ICarterModule
                 completion.Assignment.Status = ChoreStatus.Pending;
                 completion.Assignment.CompletedAt = null;
 
-                await choreHub.NotifyChoreGroup(completionFamilyId.ToString(), HubMethods.ChoreRejected, new
+                _ = choreHub.NotifyChoreGroup(familyId.ToString(), HubMethods.ChoreRejected, new
                 {
                     assignmentId = completion.Assignment.Id,
                     choreName = completion.Assignment.Chore.Name,
@@ -461,7 +410,7 @@ public class ChoresModule : ICarterModule
             }
             else
             {
-                await choreHub.NotifyChoreGroup(completionFamilyId.ToString(), HubMethods.ChoreApproved, new
+                _ = choreHub.NotifyChoreGroup(familyId.ToString(), HubMethods.ChoreApproved, new
                 {
                     assignmentId = completion.Assignment.Id,
                     choreName = completion.Assignment.Chore.Name,
@@ -472,41 +421,6 @@ public class ChoresModule : ICarterModule
 
             await db.SaveChangesAsync(ct);
 
-            // ── Auto-generate next assignment for recurring chores ──
-            if (request.Approved &&
-                completion.Assignment.Chore.Recurrence != ChoreRecurrence.Once)
-            {
-                var dueDate = CalculateNextDueDate(
-                    completion.Assignment.DueDate,
-                    completion.Assignment.Chore.Recurrence);
-
-                if (dueDate != null)
-                {
-                    var nextAssignment = new ChoreAssignment
-                    {
-                        Id = Guid.NewGuid(),
-                        ChoreId = completion.Assignment.ChoreId,
-                        AssignedToId = completion.Assignment.AssignedToId,
-                        DueDate = dueDate.Value,
-                        Status = ChoreStatus.Pending,
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    db.ChoreAssignments.Add(nextAssignment);
-                    await db.SaveChangesAsync(ct);
-
-                    await choreHub.NotifyChoreGroup(completionFamilyId.ToString(), HubMethods.ChoreAssigned, new
-                    {
-                        nextAssignment.Id,
-                        nextAssignment.ChoreId,
-                        choreName = completion.Assignment.Chore.Name,
-                        pointValue = completion.Assignment.Chore.PointValue,
-                        nextAssignment.AssignedToId,
-                        nextAssignment.DueDate
-                    });
-                }
-            }
-
             return Results.Ok(new
             {
                 completion.Id,
@@ -515,18 +429,6 @@ public class ChoresModule : ICarterModule
         })
         .WithDescription("Parent approves or rejects a chore completion.");
     }
-
-    /// <summary>
-    /// Calculate the next due date based on recurrence pattern.
-    /// </summary>
-    private static DateOnly? CalculateNextDueDate(DateOnly currentDueDate, ChoreRecurrence recurrence) => recurrence switch
-    {
-        ChoreRecurrence.Daily => currentDueDate.AddDays(1),
-        ChoreRecurrence.Weekly => currentDueDate.AddDays(7),
-        ChoreRecurrence.Biweekly => currentDueDate.AddDays(14),
-        ChoreRecurrence.Monthly => currentDueDate.AddMonths(1),
-        _ => null
-    };
 }
 
 // ── Request DTOs ──

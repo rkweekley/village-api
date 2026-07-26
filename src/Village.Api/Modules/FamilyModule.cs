@@ -89,7 +89,6 @@ public class FamilyModule : ICarterModule
             });
         })
         .AllowAnonymous()
-        .RequireRateLimiting("InviteLookup")
         .WithDescription("Look up a family by invite code (used during registration).");
     }
 }
