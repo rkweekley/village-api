@@ -20,3 +20,7 @@ obj/
 
 # OS
 Thumbs.db
+
+# Local development database
+*.db
+*.sqlite
