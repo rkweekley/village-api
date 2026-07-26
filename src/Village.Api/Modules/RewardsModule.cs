@@ -18,12 +18,14 @@ public class RewardsModule : ICarterModule
         group.MapGet("/", async (
             HttpContext httpContext,
             VillageDbContext db,
+            int? page,
+            int? pageSize,
             CancellationToken ct) =>
         {
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
-            var rewards = await db.Rewards
+            var query = db.Rewards
                 .Where(r => r.FamilyId == familyId.Value && r.IsActive)
                 .OrderBy(r => r.PointCost)
                 .Select(r => new
@@ -36,8 +38,17 @@ public class RewardsModule : ICarterModule
                     r.MaxRedemptions,
                     r.RequiresApproval,
                     RedemptionCount = r.Redemptions.Count(rd => rd.Status == RedemptionStatus.Approved)
-                })
-                .ToListAsync(ct);
+                });
+
+            // Pagination
+            if (page.HasValue || pageSize.HasValue)
+            {
+                int p = Math.Max(1, page ?? 1);
+                int ps = Math.Clamp(pageSize ?? 50, 1, 200);
+                query = query.Skip((p - 1) * ps).Take(ps);
+            }
+
+            var rewards = await query.ToListAsync(ct);
 
             return Results.Ok(rewards);
         })
@@ -52,6 +63,15 @@ public class RewardsModule : ICarterModule
         {
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+
+            if (string.IsNullOrWhiteSpace(request.Name))
+                return Results.BadRequest(new { error = "Name is required" });
+            if (request.Name.Trim().Length > 100)
+                return Results.BadRequest(new { error = "Name must be 100 characters or less" });
+            if (request.Description?.Trim().Length > 2000)
+                return Results.BadRequest(new { error = "Description must be 2000 characters or less" });
+            if (request.PointCost <= 0)
+                return Results.BadRequest(new { error = "Point cost must be positive" });
 
             var reward = new Reward
             {
@@ -93,9 +113,24 @@ public class RewardsModule : ICarterModule
                 .FirstOrDefaultAsync(r => r.Id == id && r.FamilyId == familyId.Value, ct);
             if (reward == null) return Results.NotFound();
 
-            if (request.Name != null) reward.Name = request.Name.Trim();
-            if (request.Description != null) reward.Description = request.Description?.Trim();
-            if (request.PointCost.HasValue) reward.PointCost = request.PointCost.Value;
+            if (request.Name != null)
+            {
+                if (request.Name.Trim().Length > 100)
+                    return Results.BadRequest(new { error = "Name must be 100 characters or less" });
+                reward.Name = request.Name.Trim();
+            }
+            if (request.Description != null)
+            {
+                if (request.Description.Trim().Length > 2000)
+                    return Results.BadRequest(new { error = "Description must be 2000 characters or less" });
+                reward.Description = request.Description.Trim();
+            }
+            if (request.PointCost.HasValue)
+            {
+                if (request.PointCost.Value <= 0)
+                    return Results.BadRequest(new { error = "Point cost must be positive" });
+                reward.PointCost = request.PointCost.Value;
+            }
             if (request.Category.HasValue) reward.Category = request.Category.Value;
             if (request.MaxRedemptions.HasValue) reward.MaxRedemptions = request.MaxRedemptions.Value;
             if (request.RequiresApproval.HasValue) reward.RequiresApproval = request.RequiresApproval.Value;
@@ -133,6 +168,8 @@ public class RewardsModule : ICarterModule
         group.MapGet("/redemptions", async (
             HttpContext httpContext,
             VillageDbContext db,
+            int? page,
+            int? pageSize,
             CancellationToken ct) =>
         {
             var userId = httpContext.User.GetUserId();
@@ -148,7 +185,7 @@ public class RewardsModule : ICarterModule
             if (role != "Parent")
                 query = query.Where(r => r.UserId == userId.Value);
 
-            var redemptions = await query
+            var orderedQuery = query
                 .OrderByDescending(r => r.CreatedAt)
                 .Select(r => new
                 {
@@ -163,8 +200,17 @@ public class RewardsModule : ICarterModule
                     r.CreatedAt,
                     r.ApprovedAt,
                     r.ApprovedById
-                })
-                .ToListAsync(ct);
+                });
+
+            // Pagination
+            if (page.HasValue || pageSize.HasValue)
+            {
+                int p = Math.Max(1, page ?? 1);
+                int ps = Math.Clamp(pageSize ?? 50, 1, 200);
+                orderedQuery = orderedQuery.Skip((p - 1) * ps).Take(ps);
+            }
+
+            var redemptions = await orderedQuery.ToListAsync(ct);
 
             return Results.Ok(redemptions);
         })
@@ -240,7 +286,7 @@ public class RewardsModule : ICarterModule
             await db.SaveChangesAsync(ct);
 
             // Real-time notifications
-            _ = pointsHub.NotifyPointsGroup(familyId.Value.ToString(), HubMethods.PointsUpdated, new
+            await pointsHub.NotifyPointsGroup(familyId.Value.ToString(), HubMethods.PointsUpdated, new
             {
                 userId = userId.Value,
                 displayName = user.DisplayName,
@@ -249,7 +295,7 @@ public class RewardsModule : ICarterModule
                 reason = $"Redeemed: {reward.Name}"
             });
 
-            _ = pointsHub.NotifyPointsGroup(familyId.Value.ToString(), HubMethods.RewardRedeemed, new
+            await pointsHub.NotifyPointsGroup(familyId.Value.ToString(), HubMethods.RewardRedeemed, new
             {
                 redemption.Id,
                 rewardId,
@@ -281,14 +327,19 @@ public class RewardsModule : ICarterModule
         {
             var userId = httpContext.User.GetUserId();
             var role = httpContext.User.GetRole();
+            var callerFamilyId = httpContext.User.GetFamilyId();
             if (userId == null) return Results.Unauthorized();
-            if (role != "Parent") return Results.Forbid();
+            if (role != "Parent" || callerFamilyId == null) return Results.Forbid();
 
             var redemption = await db.RewardRedemptions
                 .Include(r => r.Reward)
                 .Include(r => r.User)
                 .FirstOrDefaultAsync(r => r.Id == redemptionId, ct);
             if (redemption == null) return Results.NotFound();
+
+            // Verify the parent belongs to the same family as this redemption
+            if (callerFamilyId.Value != redemption.Reward.FamilyId)
+                return Results.Forbid();
 
             redemption.ApprovedById = userId.Value;
             redemption.ApprovedAt = DateTime.UtcNow;
@@ -315,7 +366,7 @@ public class RewardsModule : ICarterModule
                         CreatedAt = DateTime.UtcNow
                     });
 
-                    _ = pointsHub.NotifyPointsGroup(user.FamilyId.ToString(), HubMethods.PointsUpdated, new
+                    await pointsHub.NotifyPointsGroup(user.FamilyId.ToString(), HubMethods.PointsUpdated, new
                     {
                         userId = user.Id,
                         displayName = user.DisplayName,
@@ -325,7 +376,7 @@ public class RewardsModule : ICarterModule
                     });
                 }
 
-                _ = pointsHub.NotifyPointsGroup(redemption.Reward.FamilyId.ToString(), HubMethods.RewardRejected, new
+                await pointsHub.NotifyPointsGroup(redemption.Reward.FamilyId.ToString(), HubMethods.RewardRejected, new
                 {
                     redemptionId = redemption.Id,
                     rewardName = redemption.Reward.Name,
@@ -334,7 +385,7 @@ public class RewardsModule : ICarterModule
             }
             else
             {
-                _ = pointsHub.NotifyPointsGroup(redemption.Reward.FamilyId.ToString(), HubMethods.RewardApproved, new
+                await pointsHub.NotifyPointsGroup(redemption.Reward.FamilyId.ToString(), HubMethods.RewardApproved, new
                 {
                     redemptionId = redemption.Id,
                     rewardName = redemption.Reward.Name,
@@ -361,8 +412,8 @@ public record CreateRewardRequest(
     string Name,
     string? Description,
     int PointCost,
-    RewardCategory Category = RewardCategory.Custom,
     int? MaxRedemptions,
+    RewardCategory Category = RewardCategory.Custom,
     bool RequiresApproval = true
 );
 

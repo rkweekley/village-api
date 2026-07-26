@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Village.Infrastructure.Data;
 
@@ -10,9 +11,11 @@ using Village.Infrastructure.Data;
 namespace Village.Infrastructure.Migrations
 {
     [DbContext(typeof(VillageDbContext))]
-    partial class VillageDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260724172543_SchoolAndMealPlanning")]
+    partial class SchoolAndMealPlanning
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");

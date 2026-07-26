@@ -15,6 +15,13 @@ public static class HubMethods
     public const string FamilyUpdated = "FamilyUpdated";
     public const string MemberJoined = "MemberJoined";
     public const string MemberLeft = "MemberLeft";
+
+    // ── School ──
+    public const string SchoolWorkAssigned = "SchoolWorkAssigned";
+    public const string SchoolWorkGraded = "SchoolWorkGraded";
+
+    // ── Meal Planning ──
+    public const string VoteUpdated = "VoteUpdated";
 }
 
 public static class HubExtensions
@@ -41,5 +48,29 @@ public static class HubExtensions
         T arg)
     {
         await hub.Clients.Group($"points:{familyId}").SendAsync(method, arg);
+    }
+
+    /// <summary>
+    /// Send a school-related notification to the family's school group.
+    /// </summary>
+    public static async Task NotifySchoolGroup<T>(
+        this IHubContext<SchoolHub> hub,
+        string familyId,
+        string method,
+        T arg)
+    {
+        await hub.Clients.Group($"school:{familyId}").SendAsync(method, arg);
+    }
+
+    /// <summary>
+    /// Send a meal-plan-related notification to the family's mealplan group.
+    /// </summary>
+    public static async Task NotifyMealPlanGroup<T>(
+        this IHubContext<MealPlanHub> hub,
+        string familyId,
+        string method,
+        T arg)
+    {
+        await hub.Clients.Group($"mealplan:{familyId}").SendAsync(method, arg);
     }
 }

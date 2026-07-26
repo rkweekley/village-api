@@ -26,6 +26,9 @@ public static class DbInitializer
         db.Families.Add(family);
 
         // ── Parent users ──
+        var parentPassword = Environment.GetEnvironmentVariable("SEED_PARENT_PASSWORD") ?? "Parent123!";
+        var childPassword = Environment.GetEnvironmentVariable("SEED_CHILD_PASSWORD") ?? "Child123!";
+
         var parentUser = new User
         {
             Id = Guid.NewGuid(),
@@ -33,7 +36,7 @@ public static class DbInitializer
             Email = "parent@village.app",
             DisplayName = "Mom",
             Role = UserRole.Parent,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Parent123!"),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(parentPassword),
             PointsBalance = 500,
         };
         db.Users.Add(parentUser);
@@ -45,7 +48,7 @@ public static class DbInitializer
             Email = "dad@village.app",
             DisplayName = "Dad",
             Role = UserRole.Parent,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Parent123!"),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(parentPassword),
             PointsBalance = 500,
         };
         db.Users.Add(dadUser);
@@ -58,7 +61,7 @@ public static class DbInitializer
             Email = "alice@village.app",
             DisplayName = "Alice",
             Role = UserRole.Child,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Child123!"),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(childPassword),
             PointsBalance = 120,
             BirthDate = new DateOnly(2014, 5, 12),
         };
@@ -71,7 +74,7 @@ public static class DbInitializer
             Email = "bobby@village.app",
             DisplayName = "Bobby",
             Role = UserRole.Child,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Child123!"),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(childPassword),
             PointsBalance = 85,
             BirthDate = new DateOnly(2017, 8, 3),
         };
