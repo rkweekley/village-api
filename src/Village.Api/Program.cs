@@ -11,6 +11,10 @@ using Village.Api.Services;
 using Village.Api;
 using Village.Infrastructure.Data;
 
+// Npgsql: tolerate DateTime with Kind=Unspecified (sent by web clients without Z suffix)
+// Without this, query-string DateTimes with no timezone cause 500 errors on timestamptz columns.
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Database

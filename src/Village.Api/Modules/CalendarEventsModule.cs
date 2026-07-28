@@ -24,10 +24,10 @@ public class CalendarEventsModule : ICarterModule
             if (familyId == null) return Results.Unauthorized();
 
             // Query-string DateTimes have Kind=Unspecified; Npgsql requires UTC for timestamptz
-            from = from is { Kind: DateTimeKind.Unspecified }
-                ? DateTime.SpecifyKind(from.Value, DateTimeKind.Utc) : from;
-            to   = to   is { Kind: DateTimeKind.Unspecified }
-                ? DateTime.SpecifyKind(to.Value, DateTimeKind.Utc) : to;
+            if (from.HasValue && from.Value.Kind == DateTimeKind.Unspecified)
+                from = DateTime.SpecifyKind(from.Value, DateTimeKind.Utc);
+            if (to.HasValue && to.Value.Kind == DateTimeKind.Unspecified)
+                to = DateTime.SpecifyKind(to.Value, DateTimeKind.Utc);
 
             var query = db.CalendarEvents
                 .Include(e => e.Organizer)
