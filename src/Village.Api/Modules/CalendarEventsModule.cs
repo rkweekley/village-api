@@ -23,6 +23,12 @@ public class CalendarEventsModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
+            // Query-string DateTimes have Kind=Unspecified; Npgsql requires UTC for timestamptz
+            from = from is { Kind: DateTimeKind.Unspecified }
+                ? DateTime.SpecifyKind(from.Value, DateTimeKind.Utc) : from;
+            to   = to   is { Kind: DateTimeKind.Unspecified }
+                ? DateTime.SpecifyKind(to.Value, DateTimeKind.Utc) : to;
+
             var query = db.CalendarEvents
                 .Include(e => e.Organizer)
                 .Include(e => e.Attendees)
@@ -120,8 +126,13 @@ public class CalendarEventsModule : ICarterModule
                 Description = request.Description?.Trim(),
                 Location = request.Location?.Trim(),
                 Color = request.Color,
-                StartTime = request.StartTime,
-                EndTime = request.EndTime,
+                // Client sends DateTime with Kind=Unspecified; Npgsql needs UTC for timestamptz
+                StartTime = request.StartTime.Kind == DateTimeKind.Unspecified
+                    ? DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc)
+                    : request.StartTime,
+                EndTime = request.EndTime.Kind == DateTimeKind.Unspecified
+                    ? DateTime.SpecifyKind(request.EndTime, DateTimeKind.Utc)
+                    : request.EndTime,
                 IsAllDay = request.IsAllDay,
                 RecurrenceRule = request.RecurrenceRule,
                 CreatedAt = DateTime.UtcNow,
@@ -176,8 +187,15 @@ public class CalendarEventsModule : ICarterModule
             if (request.Description != null) evt.Description = request.Description?.Trim();
             if (request.Location != null) evt.Location = request.Location?.Trim();
             if (request.Color != null) evt.Color = request.Color;
-            if (request.StartTime.HasValue) evt.StartTime = request.StartTime.Value;
-            if (request.EndTime.HasValue) evt.EndTime = request.EndTime.Value;
+            // Client sends DateTime with Kind=Unspecified; Npgsql needs UTC for timestamptz
+            if (request.StartTime.HasValue)
+                evt.StartTime = request.StartTime.Value.Kind == DateTimeKind.Unspecified
+                    ? DateTime.SpecifyKind(request.StartTime.Value, DateTimeKind.Utc)
+                    : request.StartTime.Value;
+            if (request.EndTime.HasValue)
+                evt.EndTime = request.EndTime.Value.Kind == DateTimeKind.Unspecified
+                    ? DateTime.SpecifyKind(request.EndTime.Value, DateTimeKind.Utc)
+                    : request.EndTime.Value;
             if (request.IsAllDay.HasValue) evt.IsAllDay = request.IsAllDay.Value;
             if (request.RecurrenceRule != null) evt.RecurrenceRule = request.RecurrenceRule;
             evt.UpdatedAt = DateTime.UtcNow;
@@ -271,9 +289,9 @@ public record CreateEventRequest(
     string? Color,
     DateTime StartTime,
     DateTime EndTime,
-    bool IsAllDay = false,
     string? RecurrenceRule,
-    List<Guid>? AttendeeIds
+    List<Guid>? AttendeeIds,
+    bool IsAllDay = false
 );
 
 public record UpdateEventRequest(
