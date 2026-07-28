@@ -21,6 +21,9 @@ obj/
 # OS
 Thumbs.db
 
+# Build output
+publish/
+
 # Local development database
 *.db
 *.sqlite

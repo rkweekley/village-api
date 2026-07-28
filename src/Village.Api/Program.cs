@@ -2,10 +2,13 @@ using Carter;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Village.Api.Extensions;
 using Village.Api.Hubs;
 using Village.Api.Modules;
 using Village.Api.Services;
+using Village.Api;
 using Village.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,7 +18,8 @@ builder.Services.AddDbContext<VillageDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("Default"),
         npgsql => npgsql.MigrationsAssembly(typeof(VillageDbContext).Assembly.FullName)
-    ));
+    )
+    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
 // Auth
 builder.Services.AddVillageAuth(builder.Configuration);
@@ -47,9 +51,17 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionLogger>();
+
+// Register outermost pipeline wrapper to catch exceptions BEFORE DeveloperExceptionPage
+builder.Services.AddSingleton<IStartupFilter, ExceptionLoggingStartupFilter>();
+
 var app = builder.Build();
 
-// Middleware pipeline
+app.UseExceptionHandler(); // calls registered IExceptionHandler services
+app.UseStatusCodePages();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
