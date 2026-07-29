@@ -550,11 +550,11 @@ public record CreateRecipeRequest(
     string? Description,
     string Ingredients,
     string Instructions,
+    string? Tags = null,
+    string? PhotoUrl = null,
     int PrepTimeMinutes = 30,
     int Servings = 4,
     string Difficulty = "Easy",
-    string? Tags,
-    string? PhotoUrl,
     bool IsFamilyFavorite = false
 );
 
