@@ -37,7 +37,8 @@ public class ChoresModule : ICarterModule
                     Difficulty = c.Difficulty.ToString(),
                     c.RequiresApproval,
                     c.RequiresPhoto,
-                    c.IsActive
+                    c.IsActive,
+                    CreatedById = c.CreatedById.HasValue ? c.CreatedById.Value.ToString() : null
                 })
                 .ToListAsync(ct);
 
@@ -53,6 +54,7 @@ public class ChoresModule : ICarterModule
             CancellationToken ct) =>
         {
             var familyId = httpContext.User.GetFamilyId();
+            var userId = httpContext.User.GetUserId();
             if (familyId == null) return Results.Unauthorized();
 
             var chore = new Chore
@@ -66,6 +68,7 @@ public class ChoresModule : ICarterModule
                 Difficulty = request.Difficulty,
                 RequiresApproval = request.RequiresApproval,
                 RequiresPhoto = request.RequiresPhoto,
+                CreatedById = userId,
                 SortOrder = request.SortOrder,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -92,11 +95,17 @@ public class ChoresModule : ICarterModule
             CancellationToken ct) =>
         {
             var familyId = httpContext.User.GetFamilyId();
+            var userId = httpContext.User.GetUserId();
+            var role = httpContext.User.GetRole();
             if (familyId == null) return Results.Unauthorized();
 
             var chore = await db.Chores
                 .FirstOrDefaultAsync(c => c.Id == id && c.FamilyId == familyId.Value, ct);
             if (chore == null) return Results.NotFound();
+
+            // Only the creator or a parent can edit
+            if (chore.CreatedById != userId && role != "Parent")
+                return Results.Forbid();
 
             if (request.Name != null) chore.Name = request.Name.Trim();
             if (request.Description != null) chore.Description = request.Description?.Trim();

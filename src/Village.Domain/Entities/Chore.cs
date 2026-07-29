@@ -31,9 +31,11 @@ public class Chore
     public string? CronExpression { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
+    public Guid? CreatedById { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     public Family Family { get; set; } = null!;
+    public User? Creator { get; set; }
     public ICollection<ChoreAssignment> Assignments { get; set; } = new List<ChoreAssignment>();
 }

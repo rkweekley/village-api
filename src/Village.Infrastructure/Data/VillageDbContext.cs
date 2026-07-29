@@ -56,6 +56,10 @@ public class VillageDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(c => c.FamilyId)
                 .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(c => c.Creator)
+                .WithMany()
+                .HasForeignKey(c => c.CreatedById)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         // ChoreAssignment
