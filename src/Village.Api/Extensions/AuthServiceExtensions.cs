@@ -10,7 +10,11 @@ public static class AuthServiceExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var jwtSecret = configuration["Jwt:Secret"] ?? "dev-secret-change-in-production-min-32-chars!!";
+        var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
+                        ?? configuration["Village__JwtSecret"]
+                        ?? throw new InvalidOperationException(
+                            "JWT_SECRET environment variable is not set. Set JWT_SECRET (or Village__JwtSecret) " +
+                            "to a secure key of at least 32 characters before starting the application.");
         var jwtIssuer = configuration["Jwt:Issuer"] ?? "village.app";
         var jwtAudience = configuration["Jwt:Audience"] ?? "village.app";
 

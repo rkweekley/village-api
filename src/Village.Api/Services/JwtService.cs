@@ -30,8 +30,13 @@ public class JwtService : IJwtService
         }
         if (string.IsNullOrWhiteSpace(secret))
         {
+            secret = _configuration["Village__JwtSecret"];
+        }
+        if (string.IsNullOrWhiteSpace(secret))
+        {
             throw new InvalidOperationException(
-                "JWT signing key is not configured. Set Jwt:Secret in config or JWT_SECRET environment variable.");
+                "JWT signing key is not configured. Set the JWT_SECRET environment variable " +
+                "(or Village__JwtSecret) to a secure key of at least 32 characters.");
         }
         var issuer = _configuration["Jwt:Issuer"] ?? "village.app";
         var audience = _configuration["Jwt:Audience"] ?? "village.app";
