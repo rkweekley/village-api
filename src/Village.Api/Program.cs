@@ -1,4 +1,5 @@
 using Carter;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
@@ -35,10 +36,19 @@ builder.Services.AddScoped<NotificationService>();
 // Carter modules
 builder.Services.AddCarter();
 
+// FluentValidation
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
 // SignalR
 builder.Services.AddSignalR()
     .AddStackExchangeRedis(builder.Configuration.GetConnectionString("Redis") ?? "redis:6379",
         options => { options.Configuration.ChannelPrefix = RedisChannel.Literal("Village"); });
+
+// JSON: accept string enum values from frontend (e.g. "Once" not 0)
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+});
 
 // OpenAPI
 builder.Services.AddOpenApi();
@@ -65,6 +75,22 @@ var app = builder.Build();
 
 app.UseExceptionHandler(); // calls registered IExceptionHandler services
 app.UseStatusCodePages();
+
+// FluentValidation: return 400 for validation errors
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next(context);
+    }
+    catch (ValidationException ex)
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        context.Response.ContentType = "application/json";
+        var errors = ex.Errors.Select(e => new { field = e.PropertyName, message = e.ErrorMessage });
+        await System.Text.Json.JsonSerializer.SerializeAsync(context.Response.Body, new { errors });
+    }
+});
 
 if (app.Environment.IsDevelopment())
 {
