@@ -1,5 +1,6 @@
 using Carter;
 using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
@@ -38,6 +39,7 @@ builder.Services.AddCarter();
 
 // FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+builder.Services.AddFluentValidationAutoValidation();
 
 // SignalR
 builder.Services.AddSignalR()
