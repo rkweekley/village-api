@@ -283,8 +283,8 @@ public record CreateShoppingListRequest(
 public record AddItemRequest(
     string Name,
     string? Category,
-    int Quantity = 1,
-    string? Unit
+    string? Unit,
+    int Quantity = 1
 );
 
 public record UpdateItemRequest(

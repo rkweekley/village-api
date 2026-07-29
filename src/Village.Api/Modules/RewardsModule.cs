@@ -361,8 +361,8 @@ public record CreateRewardRequest(
     string Name,
     string? Description,
     int PointCost,
-    RewardCategory Category = RewardCategory.Custom,
     int? MaxRedemptions,
+    RewardCategory Category = RewardCategory.Custom,
     bool RequiresApproval = true
 );
 
