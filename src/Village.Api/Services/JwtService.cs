@@ -23,7 +23,16 @@ public class JwtService : IJwtService
 
     public string GenerateToken(User user)
     {
-        var secret = _configuration["Jwt:Secret"] ?? "dev-secret-change-in-production-min-32-chars!!";
+        var secret = _configuration["Jwt:Secret"];
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            secret = Environment.GetEnvironmentVariable("JWT_SECRET");
+        }
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            throw new InvalidOperationException(
+                "JWT signing key is not configured. Set Jwt:Secret in config or JWT_SECRET environment variable.");
+        }
         var issuer = _configuration["Jwt:Issuer"] ?? "village.app";
         var audience = _configuration["Jwt:Audience"] ?? "village.app";
 
