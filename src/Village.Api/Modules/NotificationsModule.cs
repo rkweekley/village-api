@@ -12,7 +12,6 @@ public class NotificationsModule : CarterModule
 {
     public NotificationsModule() : base("/api/notifications")
     {
-        IncludeInOpenApi = true;
     }
 
     public override void AddRoutes(IEndpointRouteBuilder app)
@@ -164,7 +163,7 @@ public class NotificationsModule : CarterModule
                 // Look up the user's family from the DB
                 var user = await notificationService.LookupUserAsync(userId.Value);
                 if (user?.FamilyId == null) return Results.BadRequest("User has no family. Provide familyId.");
-                familyId = user.FamilyId.Value;
+                familyId = user.FamilyId;
             }
 
             var notification = await notificationService.CreateAsync(
