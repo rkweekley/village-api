@@ -98,13 +98,20 @@ app.MapGet("/health", () => Results.Ok(new
     timestamp = DateTime.UtcNow
 })).AllowAnonymous();
 
-// Apply migrations + seed on startup (dev only)
+// Apply pending migrations on startup
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<VillageDbContext>();
     await db.Database.MigrateAsync();
     await Village.Infrastructure.Data.DbInitializer.SeedAsync(db);
+}
+else
+{
+    // Apply migrations in production too
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<VillageDbContext>();
+    await db.Database.MigrateAsync();
 }
 
 await app.RunAsync();
