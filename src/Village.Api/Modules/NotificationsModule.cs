@@ -8,15 +8,11 @@ using Village.Infrastructure.Data;
 
 namespace Village.Api.Modules;
 
-public class NotificationsModule : CarterModule
+public class NotificationsModule : ICarterModule
 {
-    public NotificationsModule() : base("/api/notifications")
+    public void AddRoutes(IEndpointRouteBuilder app)
     {
-    }
-
-    public override void AddRoutes(IEndpointRouteBuilder app)
-    {
-        var group = app.MapGroup("")
+        var group = app.MapGroup("/api/notifications")
             .RequireAuthorization();
 
         // GET /api/notifications — paginated, unread first

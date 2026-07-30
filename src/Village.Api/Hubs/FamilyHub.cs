@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Village.Api.Hubs;
 
+[Authorize]
 public class FamilyHub : Hub
 {
     public async Task JoinFamilyGroup(string familyId)

@@ -76,6 +76,7 @@ public class AuthModule : ICarterModule
             ));
         })
         .AllowAnonymous()
+        .RequireRateLimiting("Auth")
         .WithDescription("Register a new user. Without invite code → creates a new family as Parent. With invite code → joins existing family as Child.");
 
         group.MapPost("/login", async (
@@ -108,6 +109,7 @@ public class AuthModule : ICarterModule
             ));
         })
         .AllowAnonymous()
+        .RequireRateLimiting("Auth")
         .WithDescription("Authenticate with email and password. Returns JWT token.");
 
         group.MapGet("/me", async (

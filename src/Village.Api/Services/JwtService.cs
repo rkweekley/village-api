@@ -23,15 +23,8 @@ public class JwtService : IJwtService
 
     public string GenerateToken(User user)
     {
-        var secret = _configuration["Jwt:Secret"];
-        if (string.IsNullOrWhiteSpace(secret))
-        {
-            secret = Environment.GetEnvironmentVariable("JWT_SECRET");
-        }
-        if (string.IsNullOrWhiteSpace(secret))
-        {
-            secret = _configuration["Village__JwtSecret"];
-        }
+        var secret = Environment.GetEnvironmentVariable("JWT_SECRET")
+                     ?? _configuration["Village__JwtSecret"];
         if (string.IsNullOrWhiteSpace(secret))
         {
             throw new InvalidOperationException(

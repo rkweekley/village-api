@@ -5,7 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
 using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using Village.Api.Extensions;
 using Village.Api.Hubs;
 using Village.Api.Modules;
@@ -25,7 +26,7 @@ builder.Services.AddDbContext<VillageDbContext>(options =>
         builder.Configuration.GetConnectionString("Default"),
         npgsql => npgsql.MigrationsAssembly(typeof(VillageDbContext).Assembly.FullName)
     )
-    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
+    );
 
 // Auth
 builder.Services.AddVillageAuth(builder.Configuration);
@@ -70,6 +71,18 @@ builder.Services.AddCors(options =>
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionLogger>();
 
+// Rate limiting — protect auth endpoints from brute force
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("Auth", config =>
+    {
+        config.PermitLimit = 10;
+        config.Window = TimeSpan.FromMinutes(1);
+        config.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        config.QueueLimit = 2;
+    });
+});
+
 // Register outermost pipeline wrapper to catch exceptions BEFORE DeveloperExceptionPage
 builder.Services.AddSingleton<IStartupFilter, ExceptionLoggingStartupFilter>();
 
@@ -108,6 +121,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseRateLimiter();
 
 app.MapCarter();
 
