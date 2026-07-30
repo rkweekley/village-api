@@ -11,7 +11,7 @@ public class JwtServiceTests
         return new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Jwt:Secret"] = secret,
+                ["Village__JwtSecret"] = secret,
                 ["Jwt:Issuer"] = "test.village.app",
                 ["Jwt:Audience"] = "test.village.app"
             })!
