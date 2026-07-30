@@ -57,6 +57,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddOpenApi();
 
 // CORS (dev — specific origin needed for SignalR credentials)
+// Production CORS reads from env var CORS_ALLOWED_ORIGINS (comma-separated)
+var prodOrigins = (Environment.GetEnvironmentVariable("CORS_ALLOWED_ORIGINS") ?? "")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Dev", policy =>
@@ -66,6 +69,16 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader()
               .AllowCredentials();
     });
+    if (prodOrigins.Length > 0)
+    {
+        options.AddPolicy("Prod", policy =>
+        {
+            policy.WithOrigins(prodOrigins)
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        });
+    }
 });
 
 builder.Services.AddProblemDetails();
@@ -117,6 +130,10 @@ if (app.Environment.IsDevelopment())
                .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
     });
     app.UseCors("Dev");
+}
+else
+{
+    app.UseCors("Prod");
 }
 
 app.UseAuthentication();
