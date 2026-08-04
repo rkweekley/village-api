@@ -41,11 +41,13 @@ public class ShoppingListsModule : ICarterModule
 
         // POST /api/shopping — create a shopping list
         group.MapPost("/", async (
-            CreateShoppingListRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<CreateShoppingListRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
@@ -138,11 +140,13 @@ public class ShoppingListsModule : ICarterModule
         // POST /api/shopping/{listId}/items — add an item
         group.MapPost("/{listId:guid}/items", async (
             Guid listId,
-            AddItemRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<AddItemRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
@@ -223,11 +227,13 @@ public class ShoppingListsModule : ICarterModule
         group.MapPut("/{listId:guid}/items/{itemId:guid}", async (
             Guid listId,
             Guid itemId,
-            UpdateItemRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<UpdateItemRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 

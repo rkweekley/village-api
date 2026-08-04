@@ -142,10 +142,12 @@ public class NotificationsModule : ICarterModule
 
         // POST /api/notifications — create a test notification
         group.MapPost("/", async (
-            CreateNotificationRequest request,
             HttpContext httpContext,
             NotificationService notificationService) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<CreateNotificationRequest>();
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var userId = httpContext.User.GetUserId();
             if (userId == null) return Results.Unauthorized();
 

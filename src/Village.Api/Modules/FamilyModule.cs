@@ -48,11 +48,13 @@ public class FamilyModule : ICarterModule
 
         // PATCH /api/families/mine — update family settings
         group.MapPatch("/mine", async (
-            UpdateFamilyRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<UpdateFamilyRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 

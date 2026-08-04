@@ -44,11 +44,13 @@ public class SchoolModule : ICarterModule
 
         // POST /api/school/subjects — create a new subject
         group.MapPost("/subjects", async (
-            CreateSubjectRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<CreateSubjectRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
@@ -131,11 +133,13 @@ public class SchoolModule : ICarterModule
 
         // POST /api/school — create school work
         group.MapPost("/", async (
-            CreateSchoolWorkRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<CreateSchoolWorkRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
@@ -175,11 +179,13 @@ public class SchoolModule : ICarterModule
         // PUT /api/school/{id} — submit or grade school work
         group.MapPut("/{id:guid}", async (
             Guid id,
-            UpdateSchoolWorkRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<UpdateSchoolWorkRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var userId = httpContext.User.GetUserId();
             var role = httpContext.User.GetRole();
             if (userId == null) return Results.Unauthorized();
