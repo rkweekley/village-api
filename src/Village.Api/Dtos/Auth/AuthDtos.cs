@@ -1,17 +1,15 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace Village.Api.Dtos.Auth;
 
 public record RegisterRequest(
-    [Required] [EmailAddress] string Email,
-    [Required] [MinLength(3)] string DisplayName,
-    [Required] [MinLength(8)] string Password,
-    string? InviteCode // null = creating a new family
+    string Email,
+    string DisplayName,
+    string Password,
+    string? InviteCode
 );
 
 public record LoginRequest(
-    [Required] [EmailAddress] string Email,
-    [Required] string Password
+    string Email,
+    string Password
 );
 
 public record AuthResponse(
@@ -27,17 +25,17 @@ public record AuthResponse(
 );
 
 public record RefreshRequest(
-    [Required] string AccessToken,
-    [Required] string RefreshToken
+    string AccessToken,
+    string RefreshToken
 );
 
 public record ForgotPasswordRequest(
-    [Required] [EmailAddress] string Email
+    string Email
 );
 
 public record ResetPasswordRequest(
-    [Required] string Token,
-    [Required] [MinLength(8)] string NewPassword
+    string Token,
+    string NewPassword
 );
 
 public record UserInfoResponse(
