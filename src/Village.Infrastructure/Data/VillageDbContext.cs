@@ -25,6 +25,8 @@ public class VillageDbContext : DbContext
     public DbSet<MealPlan> MealPlans => Set<MealPlan>();
     public DbSet<MealPlanEntry> MealPlanEntries => Set<MealPlanEntry>();
     public DbSet<MealVote> MealVotes => Set<MealVote>();
+    public DbSet<SchoolSubject> SchoolSubjects => Set<SchoolSubject>();
+    public DbSet<SchoolWork> SchoolWorks => Set<SchoolWork>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -274,6 +276,40 @@ public class VillageDbContext : DbContext
                 .HasForeignKey(v => v.FamilyMemberId)
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(v => new { v.MealPlanEntryId, v.FamilyMemberId }).IsUnique();
+        });
+
+        // SchoolSubject
+        modelBuilder.Entity<SchoolSubject>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.HasOne(s => s.Family)
+                .WithMany()
+                .HasForeignKey(s => s.FamilyId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(s => new { s.FamilyId, s.Name });
+        });
+
+        // SchoolWork
+        modelBuilder.Entity<SchoolWork>(e =>
+        {
+            e.HasKey(w => w.Id);
+            e.HasOne(w => w.Family)
+                .WithMany()
+                .HasForeignKey(w => w.FamilyId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(w => w.Subject)
+                .WithMany(s => s.Works)
+                .HasForeignKey(w => w.SubjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(w => w.AssignedTo)
+                .WithMany()
+                .HasForeignKey(w => w.AssignedToId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(w => w.GradedBy)
+                .WithMany()
+                .HasForeignKey(w => w.GradedById)
+                .OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(w => new { w.FamilyId, w.Status });
         });
     }
 }
