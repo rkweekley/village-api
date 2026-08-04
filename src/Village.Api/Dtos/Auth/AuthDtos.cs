@@ -15,7 +15,8 @@ public record LoginRequest(
 );
 
 public record AuthResponse(
-    string Token,
+    string AccessToken,
+    string RefreshToken,
     Guid UserId,
     string DisplayName,
     string Email,
@@ -23,6 +24,20 @@ public record AuthResponse(
     Guid FamilyId,
     string FamilyName,
     bool IsNewFamily
+);
+
+public record RefreshRequest(
+    [Required] string AccessToken,
+    [Required] string RefreshToken
+);
+
+public record ForgotPasswordRequest(
+    [Required] [EmailAddress] string Email
+);
+
+public record ResetPasswordRequest(
+    [Required] string Token,
+    [Required] [MinLength(8)] string NewPassword
 );
 
 public record UserInfoResponse(

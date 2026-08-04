@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -9,7 +10,9 @@ namespace Village.Api.Services;
 
 public interface IJwtService
 {
-    string GenerateToken(User user);
+    string GenerateAccessToken(User user);
+    string GenerateRefreshToken();
+    string? GetUserIdFromExpiredToken(string token);
 }
 
 public class JwtService : IJwtService
@@ -21,7 +24,7 @@ public class JwtService : IJwtService
         _configuration = configuration;
     }
 
-    public string GenerateToken(User user)
+    public string GenerateAccessToken(User user)
     {
         var secret = Environment.GetEnvironmentVariable("JWT_SECRET")
                      ?? _configuration["Village__JwtSecret"];
@@ -51,10 +54,46 @@ public class JwtService : IJwtService
             issuer: issuer,
             audience: audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddDays(30),
+            expires: DateTime.UtcNow.AddMinutes(15),
             signingCredentials: credentials
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public string GenerateRefreshToken()
+    {
+        return Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+    }
+
+    public string? GetUserIdFromExpiredToken(string token)
+    {
+        var secret = Environment.GetEnvironmentVariable("JWT_SECRET")
+                     ?? _configuration["Village__JwtSecret"];
+        if (string.IsNullOrWhiteSpace(secret)) return null;
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
+
+        var tokenHandler = new JwtSecurityTokenHandler();
+        try
+        {
+            tokenHandler.ValidateToken(token, new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = key,
+                ValidateIssuer = true,
+                ValidIssuer = _configuration["Jwt:Issuer"] ?? "village.app",
+                ValidateAudience = true,
+                ValidAudience = _configuration["Jwt:Audience"] ?? "village.app",
+                ValidateLifetime = false // Allow expired tokens
+            }, out var validatedToken);
+
+            var jwtToken = (JwtSecurityToken)validatedToken;
+            return jwtToken.Subject;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

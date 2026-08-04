@@ -1,6 +1,8 @@
+using System.Security.Cryptography;
 using Carter;
 using Microsoft.EntityFrameworkCore;
 using Village.Api.Dtos.Auth;
+using Village.Api.Extensions;
 using Village.Domain.Entities;
 using Village.Infrastructure.Data;
 using Village.Api.Services;
@@ -13,17 +15,16 @@ public class AuthModule : ICarterModule
     {
         var group = app.MapGroup("/api/auth");
 
+        // ── Register ──────────────────────────────────────────────
         group.MapPost("/register", async (
             RegisterRequest request,
             VillageDbContext db,
             IJwtService jwt,
             CancellationToken ct) =>
         {
-            // Validate
             if (await db.Users.AnyAsync(u => u.Email == request.Email, ct))
                 return Results.Conflict(new { error = "Email already registered" });
 
-            // Create or find family
             bool isNewFamily = string.IsNullOrWhiteSpace(request.InviteCode);
             Family family;
 
@@ -46,7 +47,7 @@ public class AuthModule : ICarterModule
                 family = existing;
             }
 
-            // Create user
+            var refreshToken = jwt.GenerateRefreshToken();
             var user = new User
             {
                 Id = Guid.NewGuid(),
@@ -55,6 +56,8 @@ public class AuthModule : ICarterModule
                 DisplayName = request.DisplayName.Trim(),
                 Role = isNewFamily ? UserRole.Parent : UserRole.Child,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                RefreshToken = refreshToken,
+                RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(7),
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -62,10 +65,9 @@ public class AuthModule : ICarterModule
 
             await db.SaveChangesAsync(ct);
 
-            var token = jwt.GenerateToken(user);
-
             return Results.Created($"/api/users/{user.Id}", new AuthResponse(
-                Token: token,
+                AccessToken: jwt.GenerateAccessToken(user),
+                RefreshToken: refreshToken,
                 UserId: user.Id,
                 DisplayName: user.DisplayName,
                 Email: user.Email,
@@ -77,8 +79,9 @@ public class AuthModule : ICarterModule
         })
         .AllowAnonymous()
         .RequireRateLimiting("Auth")
-        .WithDescription("Register a new user. Without invite code → creates a new family as Parent. With invite code → joins existing family as Child.");
+        .WithDescription("Register a new user. Without invite code → creates a new family as Parent.");
 
+        // ── Login ─────────────────────────────────────────────────
         group.MapPost("/login", async (
             LoginRequest request,
             VillageDbContext db,
@@ -92,13 +95,16 @@ public class AuthModule : ICarterModule
             if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
                 return Results.Unauthorized();
 
+            // Rotate refresh token on login
+            var refreshToken = jwt.GenerateRefreshToken();
+            user.RefreshToken = refreshToken;
+            user.RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(7);
             user.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
 
-            var token = jwt.GenerateToken(user);
-
             return Results.Ok(new AuthResponse(
-                Token: token,
+                AccessToken: jwt.GenerateAccessToken(user),
+                RefreshToken: refreshToken,
                 UserId: user.Id,
                 DisplayName: user.DisplayName,
                 Email: user.Email,
@@ -110,18 +116,151 @@ public class AuthModule : ICarterModule
         })
         .AllowAnonymous()
         .RequireRateLimiting("Auth")
-        .WithDescription("Authenticate with email and password. Returns JWT token.");
+        .WithDescription("Authenticate with email and password.");
 
+        // ── Refresh ───────────────────────────────────────────────
+        group.MapPost("/refresh", async (
+            RefreshRequest request,
+            VillageDbContext db,
+            IJwtService jwt,
+            CancellationToken ct) =>
+        {
+            var userIdStr = jwt.GetUserIdFromExpiredToken(request.AccessToken);
+            if (userIdStr == null || !Guid.TryParse(userIdStr, out var userId))
+                return Results.Unauthorized();
+
+            var user = await db.Users.FirstOrDefaultAsync(u =>
+                u.Id == userId &&
+                u.RefreshToken == request.RefreshToken &&
+                u.RefreshTokenExpiresAt > DateTime.UtcNow, ct);
+
+            if (user == null)
+                return Results.Unauthorized();
+
+            // Rotate refresh token
+            var newRefreshToken = jwt.GenerateRefreshToken();
+            user.RefreshToken = newRefreshToken;
+            user.RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(7);
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new
+            {
+                accessToken = jwt.GenerateAccessToken(user),
+                refreshToken = newRefreshToken
+            });
+        })
+        .AllowAnonymous()
+        .RequireRateLimiting("Auth")
+        .WithDescription("Refresh an expired access token using a valid refresh token.");
+
+        // ── Logout ────────────────────────────────────────────────
+        group.MapPost("/logout", async (
+            HttpContext http,
+            VillageDbContext db,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.GetUserId();
+            if (userId == null) return Results.Unauthorized();
+
+            var user = await db.Users.FindAsync(new object[] { userId.Value }, ct);
+            if (user != null)
+            {
+                user.RefreshToken = null;
+                user.RefreshTokenExpiresAt = null;
+                await db.SaveChangesAsync(ct);
+            }
+            return Results.Ok(new { message = "Logged out" });
+        })
+        .RequireAuthorization()
+        .WithDescription("Invalidate the current refresh token.");
+
+        // ── Forgot Password ──────────────────────────────────────
+        group.MapPost("/forgot-password", async (
+            ForgotPasswordRequest request,
+            VillageDbContext db,
+            IEmailService? email,
+            IJwtService jwt,
+            CancellationToken ct) =>
+        {
+            // Always return same response to prevent email enumeration
+            var user = await db.Users.FirstOrDefaultAsync(u =>
+                u.Email == request.Email.ToLowerInvariant().Trim(), ct);
+            if (user == null)
+                return Results.Ok(new { message = "If the email exists, a reset link has been sent." });
+
+            var token = GenerateResetToken();
+            user.PasswordResetToken = BCrypt.Net.BCrypt.HashPassword(token); // Hash in DB
+            user.PasswordResetTokenExpiresAt = DateTime.UtcNow.AddHours(1);
+            await db.SaveChangesAsync(ct);
+
+            if (email != null)
+            {
+                try
+                {
+                    await email.SendPasswordResetEmailAsync(user.Email, user.DisplayName, token);
+                }
+                catch
+                {
+                    // Logged inside EmailService; don't expose email failure to attacker
+                }
+            }
+
+            return Results.Ok(new { message = "If the email exists, a reset link has been sent." });
+        })
+        .AllowAnonymous()
+        .RequireRateLimiting("Auth")
+        .WithDescription("Request a password reset email.");
+
+        // ── Reset Password ───────────────────────────────────────
+        group.MapPost("/reset-password", async (
+            ResetPasswordRequest request,
+            VillageDbContext db,
+            CancellationToken ct) =>
+        {
+            // Find user with non-expired reset token; verify against hash
+            var candidates = await db.Users
+                .Where(u => u.PasswordResetToken != null
+                            && u.PasswordResetTokenExpiresAt > DateTime.UtcNow)
+                .ToListAsync(ct);
+
+            User? found = null;
+            foreach (var user in candidates)
+            {
+                if (BCrypt.Net.BCrypt.Verify(request.Token, user.PasswordResetToken))
+                {
+                    found = user;
+                    break;
+                }
+            }
+
+            if (found == null)
+                return Results.BadRequest(new { error = "Invalid or expired reset token" });
+
+            found.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            found.PasswordResetToken = null;
+            found.PasswordResetTokenExpiresAt = null;
+            // Invalidate all existing refresh tokens
+            found.RefreshToken = null;
+            found.RefreshTokenExpiresAt = null;
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new { message = "Password reset successfully. Please log in." });
+        })
+        .AllowAnonymous()
+        .RequireRateLimiting("Auth")
+        .WithDescription("Reset password using a token from the forgot-password email.");
+
+        // ── Me ───────────────────────────────────────────────────
         group.MapGet("/me", async (
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
-            var userIdStr = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (userIdStr == null || !Guid.TryParse(userIdStr, out var userId))
+            var userId = httpContext.User.GetUserId();
+            if (userId == null)
                 return Results.Unauthorized();
 
-            var user = await db.Users.FindAsync(new object[] { userId }, ct);
+            var user = await db.Users.FindAsync(new object[] { userId.Value }, ct);
             if (user == null)
                 return Results.NotFound();
 
@@ -144,5 +283,10 @@ public class AuthModule : ICarterModule
         const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         var random = Random.Shared;
         return new string(Enumerable.Range(0, 8).Select(_ => chars[random.Next(chars.Length)]).ToArray());
+    }
+
+    private static string GenerateResetToken()
+    {
+        return Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
     }
 }
