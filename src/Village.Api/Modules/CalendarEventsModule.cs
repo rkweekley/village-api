@@ -108,11 +108,13 @@ public class CalendarEventsModule : ICarterModule
 
         // POST /api/calendar — create an event
         group.MapPost("/", async (
-            CreateEventRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<CreateEventRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var userId = httpContext.User.GetUserId();
             var familyId = httpContext.User.GetFamilyId();
             if (userId == null || familyId == null) return Results.Unauthorized();
@@ -170,11 +172,13 @@ public class CalendarEventsModule : ICarterModule
         // PUT /api/calendar/{id} — update an event
         group.MapPut("/{id:guid}", async (
             Guid id,
-            UpdateEventRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<UpdateEventRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var userId = httpContext.User.GetUserId();
             var familyId = httpContext.User.GetFamilyId();
             if (userId == null || familyId == null) return Results.Unauthorized();
@@ -247,11 +251,13 @@ public class CalendarEventsModule : ICarterModule
         // POST /api/calendar/{eventId}/rsvp — set attendee status
         group.MapPost("/{eventId:guid}/rsvp", async (
             Guid eventId,
-            RsvpRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<RsvpRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var userId = httpContext.User.GetUserId();
             if (userId == null) return Results.Unauthorized();
 

@@ -98,11 +98,13 @@ public class MealsModule : ICarterModule
 
         // POST /api/recipes — create a new recipe
         recipes.MapPost("/", async (
-            CreateRecipeRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<CreateRecipeRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var familyId = httpContext.User.GetFamilyId();
             var userId = httpContext.User.GetUserId();
             if (familyId == null || userId == null) return Results.Unauthorized();
@@ -152,11 +154,13 @@ public class MealsModule : ICarterModule
         // PUT /api/recipes/{id} — update a recipe
         recipes.MapPut("/{id:guid}", async (
             Guid id,
-            UpdateRecipeRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<UpdateRecipeRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
@@ -334,11 +338,13 @@ public class MealsModule : ICarterModule
 
         // POST /api/meal-plans — create a new meal plan for a week
         mealPlans.MapPost("/", async (
-            CreateMealPlanRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<CreateMealPlanRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var familyId = httpContext.User.GetFamilyId();
             var userId = httpContext.User.GetUserId();
             if (familyId == null || userId == null) return Results.Unauthorized();
@@ -382,11 +388,13 @@ public class MealsModule : ICarterModule
         // PUT /api/meal-plans/{mealPlanId}/entries — add an entry to a meal plan
         mealPlans.MapPut("/{mealPlanId:guid}/entries", async (
             Guid mealPlanId,
-            AddEntryRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<AddEntryRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
@@ -463,11 +471,13 @@ public class MealsModule : ICarterModule
         mealPlans.MapPost("/{mealPlanId:guid}/entries/{entryId:guid}/vote", async (
             Guid mealPlanId,
             Guid entryId,
-            CastVoteRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<CastVoteRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var familyId = httpContext.User.GetFamilyId();
             var userId = httpContext.User.GetUserId();
             if (familyId == null || userId == null) return Results.Unauthorized();
