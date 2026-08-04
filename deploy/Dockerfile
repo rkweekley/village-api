@@ -1,5 +1,5 @@
 # ── Build stage ──
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.10 AS build
 WORKDIR /app
 
 # Copy project files — layer so restore is cached
@@ -16,7 +16,7 @@ COPY src/ src/
 RUN dotnet publish src/Village.Api/Village.Api.csproj -c Release -o /app/publish
 
 # ── Runtime image ──
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.10 AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends libgssapi-krb5-2 && rm -rf /var/lib/apt/lists/*
