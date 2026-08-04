@@ -146,6 +146,7 @@ public class MealsModule : ICarterModule
                 CreatedAt = recipe.CreatedAt.ToString("o")
             });
         })
+        .Accepts<CreateRecipeRequest>("application/json")
         .WithDescription("Create a new recipe.");
 
         // PUT /api/recipes/{id} — update a recipe
@@ -195,6 +196,7 @@ public class MealsModule : ICarterModule
                 CreatedAt = recipe.CreatedAt.ToString("o")
             });
         })
+        .Accepts<UpdateRecipeRequest>("application/json")
         .WithDescription("Update a recipe's properties.");
 
         // DELETE /api/recipes/{id} — delete a recipe
@@ -374,6 +376,7 @@ public class MealsModule : ICarterModule
                 Entries = new List<object>()
             });
         })
+        .Accepts<CreateMealPlanRequest>("application/json")
         .WithDescription("Create a new meal plan for a week.");
 
         // PUT /api/meal-plans/{mealPlanId}/entries — add an entry to a meal plan
@@ -429,6 +432,7 @@ public class MealsModule : ICarterModule
                 entry.SortOrder
             });
         })
+        .Accepts<AddEntryRequest>("application/json")
         .WithDescription("Add an entry (meal slot) to a meal plan.");
 
         // DELETE /api/meal-plans/{mealPlanId}/entries/{entryId} — remove an entry
@@ -502,6 +506,7 @@ public class MealsModule : ICarterModule
 
             return Results.Ok(new { entryId, preference = request.Preference });
         })
+        .Accepts<CastVoteRequest>("application/json")
         .WithDescription("Cast or update a vote on a meal plan entry.");
 
         // GET /api/meal-plans/{mealPlanId}/entries/{entryId}/votes — get votes tally

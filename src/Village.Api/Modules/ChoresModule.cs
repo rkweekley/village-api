@@ -84,6 +84,7 @@ public class ChoresModule : ICarterModule
                 chore.PointValue
             });
         })
+        .Accepts<CreateChoreRequest>("application/json")
         .WithDescription("Create a new chore template.");
 
         // PUT /api/chores/{id} — update a chore
@@ -121,6 +122,7 @@ public class ChoresModule : ICarterModule
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { chore.Id, chore.Name });
         })
+        .Accepts<UpdateChoreRequest>("application/json")
         .WithDescription("Update a chore's properties.");
 
         // DELETE /api/chores/{id} — soft-delete a chore
@@ -242,6 +244,7 @@ public class ChoresModule : ICarterModule
                 assignment.DueDate
             });
         })
+        .Accepts<AssignChoreRequest>("application/json")
         .WithDescription("Assign a chore to a family member.");
 
         // POST /api/chores/assignments/{assignmentId}/complete — mark as completed
@@ -343,6 +346,7 @@ public class ChoresModule : ICarterModule
                 ApprovalStatus = completion.ApprovalStatus.ToString()
             });
         })
+        .Accepts<CompleteChoreRequest>("application/json")
         .WithDescription("Mark a chore assignment as completed, optionally awaiting approval.");
 
         // POST /api/chores/completions/{completionId}/approve — approve/reject a completion
@@ -436,6 +440,7 @@ public class ChoresModule : ICarterModule
                 ApprovalStatus = completion.ApprovalStatus.ToString()
             });
         })
+        .Accepts<ApproveCompletionRequest>("application/json")
         .WithDescription("Parent approves or rejects a chore completion.");
     }
 }

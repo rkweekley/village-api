@@ -67,6 +67,7 @@ public class ShoppingListsModule : ICarterModule
                 list.Name
             });
         })
+        .Accepts<CreateShoppingListRequest>("application/json")
         .WithDescription("Create a new shopping list.");
 
         // GET /api/shopping/{id} — get a shopping list with all items
@@ -178,6 +179,7 @@ public class ShoppingListsModule : ICarterModule
                 item.SortOrder
             });
         })
+        .Accepts<AddItemRequest>("application/json")
         .WithDescription("Add an item to a shopping list.");
 
         // PUT /api/shopping/{listId}/items/{itemId}/toggle — check/uncheck an item
@@ -245,6 +247,7 @@ public class ShoppingListsModule : ICarterModule
 
             return Results.Ok(new { item.Id, item.Name, item.Quantity });
         })
+        .Accepts<UpdateItemRequest>("application/json")
         .WithDescription("Update shopping list item details.");
 
         // DELETE /api/shopping/{listId}/items/{itemId} — remove an item

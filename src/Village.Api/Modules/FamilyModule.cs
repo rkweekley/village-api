@@ -67,6 +67,7 @@ public class FamilyModule : ICarterModule
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { family.Id, family.Name, family.CurrencyName, family.Timezone });
         })
+        .Accepts<UpdateFamilyRequest>("application/json")
         .WithDescription("Update family name, currency name, or timezone.");
 
         // GET /api/families/invite/{code} — look up invite code

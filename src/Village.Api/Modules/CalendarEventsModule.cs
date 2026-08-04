@@ -164,6 +164,7 @@ public class CalendarEventsModule : ICarterModule
                 evt.StartTime
             });
         })
+        .Accepts<CreateEventRequest>("application/json")
         .WithDescription("Create a new calendar event.");
 
         // PUT /api/calendar/{id} — update an event
@@ -219,6 +220,7 @@ public class CalendarEventsModule : ICarterModule
 
             return Results.Ok(new { evt.Id, evt.Title });
         })
+        .Accepts<UpdateEventRequest>("application/json")
         .WithDescription("Update a calendar event.");
 
         // DELETE /api/calendar/{id} — delete an event
@@ -276,6 +278,7 @@ public class CalendarEventsModule : ICarterModule
 
             return Results.Ok(new { eventId, Status = request.Status.ToString() });
         })
+        .Accepts<RsvpRequest>("application/json")
         .WithDescription("RSVP to an event (Pending/Accepted/Declined/Tentative).");
     }
 }

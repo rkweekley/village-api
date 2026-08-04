@@ -76,6 +76,7 @@ public class RewardsModule : ICarterModule
                 reward.PointCost
             });
         })
+        .Accepts<CreateRewardRequest>("application/json")
         .WithDescription("Create a new reward.");
 
         // PUT /api/rewards/{id} — update a reward
@@ -104,6 +105,7 @@ public class RewardsModule : ICarterModule
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { reward.Id, reward.Name });
         })
+        .Accepts<UpdateRewardRequest>("application/json")
         .WithDescription("Update a reward's properties.");
 
         // DELETE /api/rewards/{id} — soft-delete a reward
@@ -351,6 +353,7 @@ public class RewardsModule : ICarterModule
                 Status = redemption.Status.ToString()
             });
         })
+        .Accepts<ApproveRedemptionRequest>("application/json")
         .WithDescription("Parent approves or rejects a reward redemption.");
     }
 }

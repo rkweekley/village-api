@@ -76,6 +76,7 @@ public class SchoolModule : ICarterModule
                 subject.IsActive
             });
         })
+        .Accepts<CreateSubjectRequest>("application/json")
         .WithDescription("Create a new school subject.");
 
         // ── School Work ──
@@ -168,6 +169,7 @@ public class SchoolModule : ICarterModule
                 Status = work.Status.ToString()
             });
         })
+        .Accepts<CreateSchoolWorkRequest>("application/json")
         .WithDescription("Create a new school work assignment.");
 
         // PUT /api/school/{id} — submit or grade school work
@@ -229,6 +231,7 @@ public class SchoolModule : ICarterModule
                 work.PointsEarned
             });
         })
+        .Accepts<UpdateSchoolWorkRequest>("application/json")
         .WithDescription("Submit or grade a school work item.");
 
         // GET /api/school/pending-grading — items submitted but not graded (parent view)
