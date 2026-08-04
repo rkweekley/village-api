@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Carter;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Village.Api.Dtos.Auth;
 using Village.Api.Extensions;
@@ -17,7 +18,7 @@ public class AuthModule : ICarterModule
 
         // ── Register ──────────────────────────────────────────────
         group.MapPost("/register", async (
-            RegisterRequest request,
+            [FromBody] RegisterRequest request,
             VillageDbContext db,
             IJwtService jwt,
             CancellationToken ct) =>
@@ -83,7 +84,7 @@ public class AuthModule : ICarterModule
 
         // ── Login ─────────────────────────────────────────────────
         group.MapPost("/login", async (
-            LoginRequest request,
+            [FromBody] LoginRequest request,
             VillageDbContext db,
             IJwtService jwt,
             CancellationToken ct) =>
@@ -120,7 +121,7 @@ public class AuthModule : ICarterModule
 
         // ── Refresh ───────────────────────────────────────────────
         group.MapPost("/refresh", async (
-            RefreshRequest request,
+            [FromBody] RefreshRequest request,
             VillageDbContext db,
             IJwtService jwt,
             CancellationToken ct) =>
@@ -176,7 +177,7 @@ public class AuthModule : ICarterModule
 
         // ── Forgot Password ──────────────────────────────────────
         group.MapPost("/forgot-password", async (
-            ForgotPasswordRequest request,
+            [FromBody] ForgotPasswordRequest request,
             VillageDbContext db,
             IEmailService? email,
             IJwtService jwt,
@@ -213,7 +214,7 @@ public class AuthModule : ICarterModule
 
         // ── Reset Password ───────────────────────────────────────
         group.MapPost("/reset-password", async (
-            ResetPasswordRequest request,
+            [FromBody] ResetPasswordRequest request,
             VillageDbContext db,
             CancellationToken ct) =>
         {
