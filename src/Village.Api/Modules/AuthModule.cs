@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using Carter;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Village.Api.Dtos.Auth;
 using Village.Api.Extensions;
@@ -18,11 +17,14 @@ public class AuthModule : ICarterModule
 
         // ── Register ──────────────────────────────────────────────
         group.MapPost("/register", async (
-            RegisterRequest request,
+            HttpContext httpContext,
             VillageDbContext db,
             IJwtService jwt,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<RegisterRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             if (await db.Users.AnyAsync(u => u.Email == request.Email, ct))
                 return Results.Conflict(new { error = "Email already registered" });
 
@@ -78,18 +80,20 @@ public class AuthModule : ICarterModule
                 IsNewFamily: isNewFamily
             ));
         })
-        .Accepts<RegisterRequest>("application/json")
         .AllowAnonymous()
         .RequireRateLimiting("Auth")
-        .WithDescription("Register a new user. Without invite code → creates a new family as Parent.");
+        .WithDescription("Register a new user.");
 
         // ── Login ─────────────────────────────────────────────────
         group.MapPost("/login", async (
-            LoginRequest request,
+            HttpContext httpContext,
             VillageDbContext db,
             IJwtService jwt,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<LoginRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var user = await db.Users
                 .Include(u => u.Family)
                 .FirstOrDefaultAsync(u => u.Email == request.Email.ToLowerInvariant().Trim(), ct);
@@ -97,7 +101,6 @@ public class AuthModule : ICarterModule
             if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
                 return Results.Unauthorized();
 
-            // Rotate refresh token on login
             var refreshToken = jwt.GenerateRefreshToken();
             user.RefreshToken = refreshToken;
             user.RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(7);
@@ -116,18 +119,20 @@ public class AuthModule : ICarterModule
                 IsNewFamily: false
             ));
         })
-        .Accepts<LoginRequest>("application/json")
         .AllowAnonymous()
         .RequireRateLimiting("Auth")
         .WithDescription("Authenticate with email and password.");
 
         // ── Refresh ───────────────────────────────────────────────
         group.MapPost("/refresh", async (
-            RefreshRequest request,
+            HttpContext httpContext,
             VillageDbContext db,
             IJwtService jwt,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<RefreshRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var userIdStr = jwt.GetUserIdFromExpiredToken(request.AccessToken);
             if (userIdStr == null || !Guid.TryParse(userIdStr, out var userId))
                 return Results.Unauthorized();
@@ -140,7 +145,6 @@ public class AuthModule : ICarterModule
             if (user == null)
                 return Results.Unauthorized();
 
-            // Rotate refresh token
             var newRefreshToken = jwt.GenerateRefreshToken();
             user.RefreshToken = newRefreshToken;
             user.RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(7);
@@ -152,18 +156,17 @@ public class AuthModule : ICarterModule
                 refreshToken = newRefreshToken
             });
         })
-        .Accepts<RefreshRequest>("application/json")
         .AllowAnonymous()
         .RequireRateLimiting("Auth")
-        .WithDescription("Refresh an expired access token using a valid refresh token.");
+        .WithDescription("Refresh an expired access token.");
 
         // ── Logout ────────────────────────────────────────────────
         group.MapPost("/logout", async (
-            HttpContext http,
+            HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
-            var userId = http.User.GetUserId();
+            var userId = httpContext.User.GetUserId();
             if (userId == null) return Results.Unauthorized();
 
             var user = await db.Users.FindAsync(new object[] { userId.Value }, ct);
@@ -180,12 +183,13 @@ public class AuthModule : ICarterModule
 
         // ── Forgot Password ──────────────────────────────────────
         group.MapPost("/forgot-password", async (
-            ForgotPasswordRequest request,
+            HttpContext httpContext,
             VillageDbContext db,
-            HttpContext http,
             CancellationToken ct) =>
         {
-            // Always return same response to prevent email enumeration
+            var request = await httpContext.Request.ReadFromJsonAsync<ForgotPasswordRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var user = await db.Users.FirstOrDefaultAsync(u =>
                 u.Email == request.Email.ToLowerInvariant().Trim(), ct);
             if (user == null)
@@ -196,33 +200,31 @@ public class AuthModule : ICarterModule
             user.PasswordResetTokenExpiresAt = DateTime.UtcNow.AddHours(1);
             await db.SaveChangesAsync(ct);
 
-            var emailService = http.RequestServices.GetService<IEmailService>();
+            var emailService = httpContext.RequestServices.GetService<IEmailService>();
             if (emailService != null)
             {
                 try
                 {
                     await emailService.SendPasswordResetEmailAsync(user.Email, user.DisplayName, token);
                 }
-                catch
-                {
-                    // Logged inside EmailService; don't expose email failure to attacker
-                }
+                catch { }
             }
 
             return Results.Ok(new { message = "If the email exists, a reset link has been sent." });
         })
-        .Accepts<ForgotPasswordRequest>("application/json")
         .AllowAnonymous()
         .RequireRateLimiting("Auth")
         .WithDescription("Request a password reset email.");
 
         // ── Reset Password ───────────────────────────────────────
         group.MapPost("/reset-password", async (
-            ResetPasswordRequest request,
+            HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
-            // Find user with non-expired reset token; verify against hash
+            var request = await httpContext.Request.ReadFromJsonAsync<ResetPasswordRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
             var candidates = await db.Users
                 .Where(u => u.PasswordResetToken != null
                             && u.PasswordResetTokenExpiresAt > DateTime.UtcNow)
@@ -244,17 +246,15 @@ public class AuthModule : ICarterModule
             found.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
             found.PasswordResetToken = null;
             found.PasswordResetTokenExpiresAt = null;
-            // Invalidate all existing refresh tokens
             found.RefreshToken = null;
             found.RefreshTokenExpiresAt = null;
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(new { message = "Password reset successfully. Please log in." });
         })
-        .Accepts<ResetPasswordRequest>("application/json")
         .AllowAnonymous()
         .RequireRateLimiting("Auth")
-        .WithDescription("Reset password using a token from the forgot-password email.");
+        .WithDescription("Reset password using a token from email.");
 
         // ── Me ───────────────────────────────────────────────────
         group.MapGet("/me", async (
@@ -281,7 +281,7 @@ public class AuthModule : ICarterModule
             ));
         })
         .RequireAuthorization()
-        .WithDescription("Get the currently authenticated user's profile.");
+        .WithDescription("Get the current user's profile.");
     }
 
     private static string GenerateInviteCode()
