@@ -18,7 +18,7 @@ public class AuthModule : ICarterModule
 
         // ── Register ──────────────────────────────────────────────
         group.MapPost("/register", async (
-            [FromBody] RegisterRequest request,
+            RegisterRequest request,
             VillageDbContext db,
             IJwtService jwt,
             CancellationToken ct) =>
@@ -84,7 +84,7 @@ public class AuthModule : ICarterModule
 
         // ── Login ─────────────────────────────────────────────────
         group.MapPost("/login", async (
-            [FromBody] LoginRequest request,
+            LoginRequest request,
             VillageDbContext db,
             IJwtService jwt,
             CancellationToken ct) =>
@@ -121,7 +121,7 @@ public class AuthModule : ICarterModule
 
         // ── Refresh ───────────────────────────────────────────────
         group.MapPost("/refresh", async (
-            [FromBody] RefreshRequest request,
+            RefreshRequest request,
             VillageDbContext db,
             IJwtService jwt,
             CancellationToken ct) =>
@@ -177,10 +177,9 @@ public class AuthModule : ICarterModule
 
         // ── Forgot Password ──────────────────────────────────────
         group.MapPost("/forgot-password", async (
-            [FromBody] ForgotPasswordRequest request,
+            ForgotPasswordRequest request,
             VillageDbContext db,
-            IEmailService? email,
-            IJwtService jwt,
+            HttpContext http,
             CancellationToken ct) =>
         {
             // Always return same response to prevent email enumeration
@@ -190,15 +189,16 @@ public class AuthModule : ICarterModule
                 return Results.Ok(new { message = "If the email exists, a reset link has been sent." });
 
             var token = GenerateResetToken();
-            user.PasswordResetToken = BCrypt.Net.BCrypt.HashPassword(token); // Hash in DB
+            user.PasswordResetToken = BCrypt.Net.BCrypt.HashPassword(token);
             user.PasswordResetTokenExpiresAt = DateTime.UtcNow.AddHours(1);
             await db.SaveChangesAsync(ct);
 
-            if (email != null)
+            var emailService = http.RequestServices.GetService<IEmailService>();
+            if (emailService != null)
             {
                 try
                 {
-                    await email.SendPasswordResetEmailAsync(user.Email, user.DisplayName, token);
+                    await emailService.SendPasswordResetEmailAsync(user.Email, user.DisplayName, token);
                 }
                 catch
                 {
@@ -214,7 +214,7 @@ public class AuthModule : ICarterModule
 
         // ── Reset Password ───────────────────────────────────────
         group.MapPost("/reset-password", async (
-            [FromBody] ResetPasswordRequest request,
+            ResetPasswordRequest request,
             VillageDbContext db,
             CancellationToken ct) =>
         {
