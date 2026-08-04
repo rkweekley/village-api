@@ -35,6 +35,9 @@ builder.Services.AddSingleton<IJwtService, JwtService>();
 // Notifications
 builder.Services.AddScoped<NotificationService>();
 
+// Email
+builder.Services.AddHttpClient<IEmailService, MailgunEmailService>();
+
 // Carter modules
 builder.Services.AddCarter();
 
@@ -104,6 +107,8 @@ var app = builder.Build();
 app.UseExceptionHandler(); // calls registered IExceptionHandler services
 app.UseStatusCodePages();
 
+app.UseMiddleware<Village.Api.Extensions.SecurityHeadersMiddleware>();
+
 // FluentValidation: return 400 for validation errors
 app.Use(async (context, next) =>
 {
@@ -150,13 +155,35 @@ app.MapHub<Village.Api.Hubs.PointsHub>("/hubs/points");
 app.MapHub<Village.Api.Hubs.NotificationsHub>("/hubs/notifications");
 
 // Health check
-app.MapGet("/health", () => Results.Ok(new
+app.MapGet("/health", async (Village.Infrastructure.Data.VillageDbContext db, StackExchange.Redis.IConnectionMultiplexer? redis) =>
 {
-    status = "healthy",
-    service = "village-api",
-    version = "0.1.0",
-    timestamp = DateTime.UtcNow
-})).AllowAnonymous();
+    var status = "healthy";
+    var dbStatus = "unknown";
+    var redisStatus = "unknown";
+
+    try { await db.Database.CanConnectAsync(); dbStatus = "connected"; }
+    catch { dbStatus = "unavailable"; status = "degraded"; }
+
+    if (redis != null)
+    {
+        try { redisStatus = redis.IsConnected ? "connected" : "disconnected"; }
+        catch { redisStatus = "unavailable"; status = "degraded"; }
+    }
+    else
+    {
+        redisStatus = "not_configured";
+    }
+
+    return Results.Ok(new
+    {
+        status,
+        service = "village-api",
+        version = "0.2.0",
+        timestamp = DateTime.UtcNow,
+        database = dbStatus,
+        redis = redisStatus
+    });
+}).AllowAnonymous();
 
 // Apply pending migrations on startup
 if (app.Environment.IsDevelopment())
