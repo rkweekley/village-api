@@ -79,7 +79,6 @@ public class AuthModule : ICarterModule
             ));
         })
         .Accepts<RegisterRequest>("application/json")
-        .Accepts<RegisterRequest>("application/json")
         .AllowAnonymous()
         .RequireRateLimiting("Auth")
         .WithDescription("Register a new user. Without invite code → creates a new family as Parent.");
@@ -118,7 +117,6 @@ public class AuthModule : ICarterModule
             ));
         })
         .Accepts<LoginRequest>("application/json")
-        .Accepts<LoginRequest>("application/json")
         .AllowAnonymous()
         .RequireRateLimiting("Auth")
         .WithDescription("Authenticate with email and password.");
@@ -154,7 +152,6 @@ public class AuthModule : ICarterModule
                 refreshToken = newRefreshToken
             });
         })
-        .Accepts<RefreshRequest>("application/json")
         .Accepts<RefreshRequest>("application/json")
         .AllowAnonymous()
         .RequireRateLimiting("Auth")
@@ -215,7 +212,6 @@ public class AuthModule : ICarterModule
             return Results.Ok(new { message = "If the email exists, a reset link has been sent." });
         })
         .Accepts<ForgotPasswordRequest>("application/json")
-        .Accepts<ForgotPasswordRequest>("application/json")
         .AllowAnonymous()
         .RequireRateLimiting("Auth")
         .WithDescription("Request a password reset email.");
@@ -255,7 +251,6 @@ public class AuthModule : ICarterModule
 
             return Results.Ok(new { message = "Password reset successfully. Please log in." });
         })
-        .Accepts<ResetPasswordRequest>("application/json")
         .Accepts<ResetPasswordRequest>("application/json")
         .AllowAnonymous()
         .RequireRateLimiting("Auth")

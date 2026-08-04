@@ -185,7 +185,8 @@ public class NotificationsModule : ICarterModule
                 notification.IsRead,
                 notification.CreatedAt
             });
-        });
+        })
+        .Accepts<CreateNotificationRequest>("application/json");
     }
 }
 
