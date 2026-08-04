@@ -155,7 +155,7 @@ app.MapHub<Village.Api.Hubs.PointsHub>("/hubs/points");
 app.MapHub<Village.Api.Hubs.NotificationsHub>("/hubs/notifications");
 
 // Health check
-app.MapGet("/health", async (Village.Infrastructure.Data.VillageDbContext db, StackExchange.Redis.IConnectionMultiplexer? redis) =>
+app.MapGet("/health", async (Village.Infrastructure.Data.VillageDbContext db, HttpContext http) =>
 {
     var status = "healthy";
     var dbStatus = "unknown";
@@ -164,6 +164,7 @@ app.MapGet("/health", async (Village.Infrastructure.Data.VillageDbContext db, St
     try { await db.Database.CanConnectAsync(); dbStatus = "connected"; }
     catch { dbStatus = "unavailable"; status = "degraded"; }
 
+    var redis = http.RequestServices.GetService<StackExchange.Redis.IConnectionMultiplexer>();
     if (redis != null)
     {
         try { redisStatus = redis.IsConnected ? "connected" : "disconnected"; }
