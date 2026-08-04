@@ -48,11 +48,12 @@ public class ChoresModule : ICarterModule
 
         // POST /api/chores — create a new chore
         group.MapPost("/", async (
-            CreateChoreRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<CreateChoreRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var familyId = httpContext.User.GetFamilyId();
             var userId = httpContext.User.GetUserId();
             if (familyId == null) return Results.Unauthorized();
@@ -90,11 +91,12 @@ public class ChoresModule : ICarterModule
         // PUT /api/chores/{id} — update a chore
         group.MapPut("/{id:guid}", async (
             Guid id,
-            UpdateChoreRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<UpdateChoreRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var familyId = httpContext.User.GetFamilyId();
             var userId = httpContext.User.GetUserId();
             var role = httpContext.User.GetRole();
@@ -199,12 +201,13 @@ public class ChoresModule : ICarterModule
         // POST /api/chores/{choreId}/assign — create an assignment
         group.MapPost("/{choreId:guid}/assign", async (
             Guid choreId,
-            AssignChoreRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             IHubContext<ChoreHub> choreHub,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<AssignChoreRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
@@ -250,13 +253,14 @@ public class ChoresModule : ICarterModule
         // POST /api/chores/assignments/{assignmentId}/complete — mark as completed
         group.MapPost("/assignments/{assignmentId:guid}/complete", async (
             Guid assignmentId,
-            CompleteChoreRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             IHubContext<ChoreHub> choreHub,
             IHubContext<PointsHub> pointsHub,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<CompleteChoreRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var userId = httpContext.User.GetUserId();
             if (userId == null) return Results.Unauthorized();
 
@@ -352,13 +356,14 @@ public class ChoresModule : ICarterModule
         // POST /api/chores/completions/{completionId}/approve — approve/reject a completion
         group.MapPost("/completions/{completionId:guid}/approve", async (
             Guid completionId,
-            ApproveCompletionRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             IHubContext<ChoreHub> choreHub,
             IHubContext<PointsHub> pointsHub,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<ApproveCompletionRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var userId = httpContext.User.GetUserId();
             var role = httpContext.User.GetRole();
             if (userId == null) return Results.Unauthorized();
