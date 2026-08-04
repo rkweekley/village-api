@@ -45,11 +45,12 @@ public class RewardsModule : ICarterModule
 
         // POST /api/rewards — create a reward
         group.MapPost("/", async (
-            CreateRewardRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<CreateRewardRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
@@ -82,11 +83,12 @@ public class RewardsModule : ICarterModule
         // PUT /api/rewards/{id} — update a reward
         group.MapPut("/{id:guid}", async (
             Guid id,
-            UpdateRewardRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<UpdateRewardRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
@@ -275,12 +277,13 @@ public class RewardsModule : ICarterModule
         // POST /api/rewards/redemptions/{redemptionId}/approve — approve/reject redemption
         group.MapPost("/redemptions/{redemptionId:guid}/approve", async (
             Guid redemptionId,
-            ApproveRedemptionRequest request,
             HttpContext httpContext,
             VillageDbContext db,
             IHubContext<PointsHub> pointsHub,
             CancellationToken ct) =>
         {
+            var request = await httpContext.Request.ReadFromJsonAsync<ApproveRedemptionRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var userId = httpContext.User.GetUserId();
             var role = httpContext.User.GetRole();
             if (userId == null) return Results.Unauthorized();
