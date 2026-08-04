@@ -38,7 +38,7 @@ public class MailgunEmailService : IEmailService
             return;
         }
 
-        var resetUrl = $"https://app.village.app/reset-password?token={Uri.EscapeDataString(resetToken)}";
+        var resetUrl = $"https://villagefamily.app/reset-password?token={Uri.EscapeDataString(resetToken)}";
         var html = $"<h2>Reset your Village password</h2><p>Hi {displayName},</p><p>Someone requested a password reset. Click below to reset:</p><p><a href=\"{resetUrl}\">Reset Password</a></p><p>This link expires in 1 hour. If you didn't request this, ignore this email.</p>";
         await SendEmailAsync(email, "Reset your Village password", html);
     }
@@ -51,7 +51,7 @@ public class MailgunEmailService : IEmailService
             return;
         }
 
-        var joinUrl = $"https://app.village.app/join?code={inviteCode}";
+        var joinUrl = $"https://villagefamily.app/join?code={inviteCode}";
         var html = $"<h2>Join {familyName} on Village</h2><p>You've been invited to join a family on Village — the family productivity app. Click below to accept:</p><p><a href=\"{joinUrl}\">Join {familyName}</a></p><p>Your invite code: <strong>{inviteCode}</strong></p>";
         await SendEmailAsync(email, $"Join {familyName} on Village", html);
     }
