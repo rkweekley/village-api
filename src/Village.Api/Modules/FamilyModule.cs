@@ -1,6 +1,7 @@
 using Carter;
 using Microsoft.EntityFrameworkCore;
 using Village.Api.Extensions;
+using Village.Domain.Entities;
 using Village.Infrastructure.Data;
 
 namespace Village.Api.Modules;
@@ -93,6 +94,74 @@ public class FamilyModule : ICarterModule
         })
         .AllowAnonymous()
         .WithDescription("Look up a family by invite code (used during registration).");
+
+        // PUT /api/families/mine/members/{userId}/role — change member role
+        group.MapPut("/mine/members/{userId:guid}/role", async (
+            Guid userId,
+            HttpContext httpContext,
+            VillageDbContext db,
+            CancellationToken ct) =>
+        {
+            var request = await httpContext.Request.ReadFromJsonAsync<ChangeRoleRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
+            var familyId = httpContext.User.GetFamilyId();
+            var currentUserRole = httpContext.User.GetRole();
+            if (familyId == null || currentUserRole != "Parent")
+                return Results.Forbid();
+
+            var member = await db.Users
+                .FirstOrDefaultAsync(u => u.Id == userId && u.FamilyId == familyId.Value, ct);
+            if (member == null) return Results.NotFound();
+
+            if (!Enum.TryParse<UserRole>(request.Role, true, out var newRole))
+                return Results.BadRequest(new { error = "Invalid role. Use: Parent, Child, Caregiver" });
+
+            member.Role = newRole;
+            member.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new { member.Id, member.DisplayName, Role = member.Role.ToString() });
+        })
+        .WithDescription("Change a family member's role (Parent only).");
+
+        // DELETE /api/families/mine/members/{userId} — remove member
+        group.MapDelete("/mine/members/{userId:guid}", async (
+            Guid userId,
+            HttpContext httpContext,
+            VillageDbContext db,
+            CancellationToken ct) =>
+        {
+            var familyId = httpContext.User.GetFamilyId();
+            var currentUserRole = httpContext.User.GetRole();
+            if (familyId == null || currentUserRole != "Parent")
+                return Results.Forbid();
+
+            var member = await db.Users
+                .FirstOrDefaultAsync(u => u.Id == userId && u.FamilyId == familyId.Value, ct);
+            if (member == null) return Results.NotFound();
+
+            if (member.Role == UserRole.Parent)
+            {
+                var parentCount = await db.Users
+                    .CountAsync(u => u.FamilyId == familyId.Value && u.Role == UserRole.Parent, ct);
+                if (parentCount <= 1)
+                    return Results.BadRequest(new { error = "Cannot remove the last Parent" });
+            }
+
+            // Anonymize: keep FK integrity but remove PII
+            member.Email = $"removed_{member.Id}@anonymous.invalid";
+            member.DisplayName = "Removed Member";
+            member.PasswordHash = "";
+            member.RefreshToken = null;
+            member.RefreshTokenExpiresAt = null;
+            member.IsManaged = false;
+            member.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new { message = "Member removed" });
+        })
+        .WithDescription("Remove a family member (Parent only).");
     }
 }
 
@@ -100,4 +169,8 @@ public record UpdateFamilyRequest(
     string? Name,
     string? CurrencyName,
     string? Timezone
+);
+
+public record ChangeRoleRequest(
+    string Role
 );
