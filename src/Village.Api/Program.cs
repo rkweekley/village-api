@@ -107,7 +107,7 @@ var app = builder.Build();
 app.UseExceptionHandler(); // calls registered IExceptionHandler services
 app.UseStatusCodePages();
 
-app.UseMiddleware<Village.Api.Extensions.SecurityHeadersMiddleware>();
+// app.UseMiddleware<Village.Api.Extensions.SecurityHeadersMiddleware>(); // TEMP disabled for debugging
 
 // FluentValidation: return 400 for validation errors
 app.Use(async (context, next) =>
