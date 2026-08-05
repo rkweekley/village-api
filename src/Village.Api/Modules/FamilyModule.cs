@@ -1,6 +1,7 @@
 using Carter;
 using Microsoft.EntityFrameworkCore;
 using Village.Api.Extensions;
+using Village.Api.Filters;
 using Village.Domain.Entities;
 using Village.Infrastructure.Data;
 
@@ -34,6 +35,12 @@ public class FamilyModule : ICarterModule
                 family.InviteCode,
                 family.CurrencyName,
                 family.Timezone,
+                family.StripeCustomerId,
+                family.StripeSubscriptionId,
+                family.SubscriptionStatus,
+                family.SubscriptionTier,
+                family.SubscriptionExpiresAt,
+                family.TrialEndsAt,
                 Members = family.Members.Select(m => new
                 {
                     m.Id,
@@ -71,6 +78,7 @@ public class FamilyModule : ICarterModule
             return Results.Ok(new { family.Id, family.Name, family.CurrencyName, family.Timezone });
         })
         .Accepts<UpdateFamilyRequest>("application/json")
+        .AddEndpointFilter<RequireSubscriptionFilter>()
         .WithDescription("Update family name, currency name, or timezone.");
 
         // GET /api/families/invite/{code} — look up invite code
