@@ -41,7 +41,6 @@ builder.Services.AddHttpClient<IEmailService, MailgunEmailService>();
 // Stripe
 Stripe.StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY")
     ?? builder.Configuration["Stripe:SecretKey"];
-Stripe.StripeConfiguration.ApiVersion = "2025-03-31.basil";
 
 // Carter modules
 builder.Services.AddCarter();
