@@ -6,6 +6,8 @@ public interface IEmailService
 {
     Task SendPasswordResetEmailAsync(string email, string displayName, string resetToken);
     Task SendInviteEmailAsync(string email, string familyName, string inviteCode);
+    Task SendWelcomeEmailAsync(string email, string displayName, string familyName);
+    Task SendNewSignupAlertAsync(string email, string displayName, string familyName);
 }
 
 public class MailgunEmailService : IEmailService
@@ -54,6 +56,44 @@ public class MailgunEmailService : IEmailService
         var joinUrl = $"https://villagefamily.app/join?code={inviteCode}";
         var html = $"<h2>Join {familyName} on Village</h2><p>You've been invited to join a family on Village — the family productivity app. Click below to accept:</p><p><a href=\"{joinUrl}\">Join {familyName}</a></p><p>Your invite code: <strong>{inviteCode}</strong></p>";
         await SendEmailAsync(email, $"Join {familyName} on Village", html);
+    }
+
+    public async Task SendWelcomeEmailAsync(string email, string displayName, string familyName)
+    {
+        if (!IsConfigured)
+        {
+            _logger.LogWarning("Cannot send welcome email — Mailgun not configured for {Email}", email);
+            return;
+        }
+
+        var html = $"<h2>Welcome to Village, {displayName}!</h2>" +
+                   $"<p>Your family <strong>{familyName}</strong> is all set up.</p>" +
+                   "<p>Village helps your family stay organized with chores, rewards, meal planning, " +
+                   "shopping lists, and more — all in one place.</p>" +
+                   "<p><strong>Here are a few things to get started:</strong></p>" +
+                   "<ul>" +
+                   "<li>Add your family members under the Family tab</li>" +
+                   "<li>Create your first chore and assign it to someone</li>" +
+                   "<li>Set up rewards to motivate the kids</li>" +
+                   "<li>Plan meals for the week</li>" +
+                   "</ul>" +
+                   "<p>If you have any questions, just reply to this email — we'd love to hear from you.</p>" +
+                   "<p>Welcome to the Village family!</p>";
+        await SendEmailAsync(email, $"Welcome to Village, {displayName}!", html);
+    }
+
+    public async Task SendNewSignupAlertAsync(string email, string displayName, string familyName)
+    {
+        if (!IsConfigured)
+        {
+            _logger.LogWarning("Cannot send signup alert — Mailgun not configured");
+            return;
+        }
+
+        var html = $"<h3>New Village Signup</h3>" +
+                   $"<p><strong>{displayName}</strong> ({email}) just created the family <strong>{familyName}</strong>.</p>" +
+                   "<p><em>— Village Bot</em></p>";
+        await SendEmailAsync("info@cyberalsolutions.com", $"New signup: {displayName} — {familyName}", html);
     }
 
     private async Task SendEmailAsync(string to, string subject, string html)
