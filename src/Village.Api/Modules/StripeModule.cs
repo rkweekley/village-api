@@ -19,6 +19,7 @@ public class StripeModule : ICarterModule
             HttpContext httpContext,
             VillageDbContext db,
             IConfiguration configuration,
+            ILogger<StripeModule> logger,
             CancellationToken ct) =>
         {
             var webhookSecret = Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET")
@@ -41,26 +42,33 @@ public class StripeModule : ICarterModule
                 return Results.BadRequest();
             }
 
+            logger.LogInformation("Webhook received: {EventType}", stripeEvent.Type);
+
             switch (stripeEvent.Type)
             {
                 case "checkout.session.completed":
-                    await HandleCheckoutCompleted(stripeEvent, db, ct);
+                    try { await HandleCheckoutCompleted(stripeEvent, db, logger, ct); }
+                    catch (Exception ex) { logger.LogError(ex, "Webhook handler failed for {EventType}", stripeEvent.Type); }
                     break;
 
                 case "invoice.paid":
-                    await HandleInvoicePaid(stripeEvent, db, ct);
+                    try { await HandleInvoicePaid(stripeEvent, db, logger, ct); }
+                    catch (Exception ex) { logger.LogError(ex, "Webhook handler failed for {EventType}", stripeEvent.Type); }
                     break;
 
                 case "invoice.payment_failed":
-                    await HandlePaymentFailed(stripeEvent, db, ct);
+                    try { await HandlePaymentFailed(stripeEvent, db, logger, ct); }
+                    catch (Exception ex) { logger.LogError(ex, "Webhook handler failed for {EventType}", stripeEvent.Type); }
                     break;
 
                 case "customer.subscription.deleted":
-                    await HandleSubscriptionDeleted(stripeEvent, db, ct);
+                    try { await HandleSubscriptionDeleted(stripeEvent, db, logger, ct); }
+                    catch (Exception ex) { logger.LogError(ex, "Webhook handler failed for {EventType}", stripeEvent.Type); }
                     break;
 
                 case "customer.subscription.updated":
-                    await HandleSubscriptionUpdated(stripeEvent, db, ct);
+                    try { await HandleSubscriptionUpdated(stripeEvent, db, logger, ct); }
+                    catch (Exception ex) { logger.LogError(ex, "Webhook handler failed for {EventType}", stripeEvent.Type); }
                     break;
             }
 
@@ -84,6 +92,10 @@ public class StripeModule : ICarterModule
 
             var family = await db.Families.FindAsync(new object[] { familyId.Value }, ct);
             if (family == null) return Results.NotFound();
+
+            // Guard: prevent duplicate checkout when family already has an active or past_due subscription
+            if (family.SubscriptionStatus == "active" || family.SubscriptionStatus == "past_due")
+                return Results.BadRequest(new { error = "You already have an active subscription. Use the portal to manage it." });
 
             var priceId = request.Tier == "annual"
                 ? (Environment.GetEnvironmentVariable("STRIPE_PRICE_ANNUAL") ?? configuration["Stripe:PriceAnnual"])
@@ -187,7 +199,8 @@ public class StripeModule : ICarterModule
 
     // ── Webhook Handlers ─────────────────────────────────────────
 
-    private static async Task HandleCheckoutCompleted(Event stripeEvent, VillageDbContext db, CancellationToken ct)
+    private static async Task HandleCheckoutCompleted(
+        Event stripeEvent, VillageDbContext db, ILogger<StripeModule> logger, CancellationToken ct)
     {
         var session = stripeEvent.Data.Object as Session;
         if (session?.ClientReferenceId == null) return;
@@ -195,6 +208,8 @@ public class StripeModule : ICarterModule
         var familyId = Guid.Parse(session.ClientReferenceId);
         var family = await db.Families.FindAsync(new object[] { familyId }, ct);
         if (family == null) return;
+
+        logger.LogInformation("Checkout completed for family {FamilyId}", familyId);
 
         // Only provision if this is a new subscription (not already provisioned)
         if (family.SubscriptionStatus == "active" && family.StripeSubscriptionId == session.SubscriptionId)
@@ -226,7 +241,8 @@ public class StripeModule : ICarterModule
         await db.SaveChangesAsync(ct);
     }
 
-    private static async Task HandleInvoicePaid(Event stripeEvent, VillageDbContext db, CancellationToken ct)
+    private static async Task HandleInvoicePaid(
+        Event stripeEvent, VillageDbContext db, ILogger<StripeModule> logger, CancellationToken ct)
     {
         var invoice = stripeEvent.Data.Object as Invoice;
         if (invoice?.SubscriptionId == null) return;
@@ -234,6 +250,8 @@ public class StripeModule : ICarterModule
         var family = await db.Families
             .FirstOrDefaultAsync(f => f.StripeSubscriptionId == invoice.SubscriptionId, ct);
         if (family == null) return;
+
+        logger.LogInformation("Invoice paid for family {FamilyId}", family.Id);
 
         family.SubscriptionStatus = "active";
         family.SubscriptionExpiresAt = DateTime.UtcNow.AddMonths(
@@ -241,7 +259,8 @@ public class StripeModule : ICarterModule
         await db.SaveChangesAsync(ct);
     }
 
-    private static async Task HandlePaymentFailed(Event stripeEvent, VillageDbContext db, CancellationToken ct)
+    private static async Task HandlePaymentFailed(
+        Event stripeEvent, VillageDbContext db, ILogger<StripeModule> logger, CancellationToken ct)
     {
         var invoice = stripeEvent.Data.Object as Invoice;
         if (invoice?.SubscriptionId == null) return;
@@ -250,11 +269,14 @@ public class StripeModule : ICarterModule
             .FirstOrDefaultAsync(f => f.StripeSubscriptionId == invoice.SubscriptionId, ct);
         if (family == null) return;
 
+        logger.LogWarning("Payment failed for family {FamilyId}", family.Id);
+
         family.SubscriptionStatus = "past_due";
         await db.SaveChangesAsync(ct);
     }
 
-    private static async Task HandleSubscriptionDeleted(Event stripeEvent, VillageDbContext db, CancellationToken ct)
+    private static async Task HandleSubscriptionDeleted(
+        Event stripeEvent, VillageDbContext db, ILogger<StripeModule> logger, CancellationToken ct)
     {
         var subscription = stripeEvent.Data.Object as Subscription;
         if (subscription?.Id == null) return;
@@ -262,13 +284,16 @@ public class StripeModule : ICarterModule
         var family = await db.Families
             .FirstOrDefaultAsync(f => f.StripeSubscriptionId == subscription.Id, ct);
         if (family == null) return;
+
+        logger.LogInformation("Subscription deleted for family {FamilyId}", family.Id);
 
         family.SubscriptionStatus = "canceled";
         family.StripeSubscriptionId = null;
         await db.SaveChangesAsync(ct);
     }
 
-    private static async Task HandleSubscriptionUpdated(Event stripeEvent, VillageDbContext db, CancellationToken ct)
+    private static async Task HandleSubscriptionUpdated(
+        Event stripeEvent, VillageDbContext db, ILogger<StripeModule> logger, CancellationToken ct)
     {
         var subscription = stripeEvent.Data.Object as Subscription;
         if (subscription?.Id == null) return;
@@ -276,6 +301,8 @@ public class StripeModule : ICarterModule
         var family = await db.Families
             .FirstOrDefaultAsync(f => f.StripeSubscriptionId == subscription.Id, ct);
         if (family == null) return;
+
+        logger.LogInformation("Subscription updated for family {FamilyId}", family.Id);
 
         // Detect tier change
         if (subscription.Items.Data.Count > 0)
