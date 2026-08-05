@@ -190,8 +190,11 @@ public class SchoolModule : ICarterModule
             var role = httpContext.User.GetRole();
             if (userId == null) return Results.Unauthorized();
 
+            var familyId = httpContext.User.GetFamilyId();
+            if (familyId == null) return Results.Unauthorized();
+
             var work = await db.SchoolWorks
-                .FirstOrDefaultAsync(w => w.Id == id, ct);
+                .FirstOrDefaultAsync(w => w.Id == id && w.FamilyId == familyId.Value, ct);
             if (work == null) return Results.NotFound();
 
             // Submit (student marks as submitted)

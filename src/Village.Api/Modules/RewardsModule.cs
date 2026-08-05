@@ -53,6 +53,8 @@ public class RewardsModule : ICarterModule
             if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
 
             var reward = new Reward
             {
@@ -91,6 +93,8 @@ public class RewardsModule : ICarterModule
             if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
 
             var reward = await db.Rewards
                 .FirstOrDefaultAsync(r => r.Id == id && r.FamilyId == familyId.Value, ct);
@@ -119,6 +123,8 @@ public class RewardsModule : ICarterModule
         {
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
 
             var reward = await db.Rewards
                 .FirstOrDefaultAsync(r => r.Id == id && r.FamilyId == familyId.Value, ct);
@@ -289,10 +295,13 @@ public class RewardsModule : ICarterModule
             if (userId == null) return Results.Unauthorized();
             if (role != "Parent") return Results.Forbid();
 
+            var familyId = httpContext.User.GetFamilyId();
+            if (familyId == null) return Results.Unauthorized();
+
             var redemption = await db.RewardRedemptions
                 .Include(r => r.Reward)
                 .Include(r => r.User)
-                .FirstOrDefaultAsync(r => r.Id == redemptionId, ct);
+                .FirstOrDefaultAsync(r => r.Id == redemptionId && r.Reward.FamilyId == familyId.Value, ct);
             if (redemption == null) return Results.NotFound();
 
             redemption.ApprovedById = userId.Value;

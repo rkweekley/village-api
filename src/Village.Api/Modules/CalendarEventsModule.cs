@@ -146,6 +146,12 @@ public class CalendarEventsModule : ICarterModule
             // Add attendees if specified
             if (request.AttendeeIds != null && request.AttendeeIds.Count > 0)
             {
+                // Validate all attendees belong to this family
+                foreach (var attendeeId in request.AttendeeIds)
+                {
+                    if (!await db.Users.AnyAsync(u => u.Id == attendeeId && u.FamilyId == familyId.Value, ct))
+                        return Results.BadRequest(new { error = $"Attendee {attendeeId} is not in your family." });
+                }
                 foreach (var attendeeId in request.AttendeeIds)
                 {
                     evt.Attendees.Add(new CalendarEventAttendee
@@ -183,10 +189,15 @@ public class CalendarEventsModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             if (userId == null || familyId == null) return Results.Unauthorized();
 
+            var role = httpContext.User.GetRole();
+
             var evt = await db.CalendarEvents
                 .Include(e => e.Attendees)
                 .FirstOrDefaultAsync(e => e.Id == id && e.FamilyId == familyId.Value, ct);
             if (evt == null) return Results.NotFound();
+
+            if (evt.OrganizerId != userId && role != "Parent")
+                return Results.Forbid();
 
             if (request.Title != null) evt.Title = request.Title.Trim();
             if (request.Description != null) evt.Description = request.Description?.Trim();
@@ -234,12 +245,18 @@ public class CalendarEventsModule : ICarterModule
             VillageDbContext db,
             CancellationToken ct) =>
         {
+            var userId = httpContext.User.GetUserId();
             var familyId = httpContext.User.GetFamilyId();
-            if (familyId == null) return Results.Unauthorized();
+            if (userId == null || familyId == null) return Results.Unauthorized();
+
+            var role = httpContext.User.GetRole();
 
             var evt = await db.CalendarEvents
                 .FirstOrDefaultAsync(e => e.Id == id && e.FamilyId == familyId.Value, ct);
             if (evt == null) return Results.NotFound();
+
+            if (evt.OrganizerId != userId && role != "Parent")
+                return Results.Forbid();
 
             db.CalendarEvents.Remove(evt);
             await db.SaveChangesAsync(ct);
@@ -260,6 +277,12 @@ public class CalendarEventsModule : ICarterModule
 
             var userId = httpContext.User.GetUserId();
             if (userId == null) return Results.Unauthorized();
+
+            var familyId = httpContext.User.GetFamilyId();
+            if (familyId == null) return Results.Unauthorized();
+
+            var eventBelongsToFamily = await db.CalendarEvents.AnyAsync(e => e.Id == eventId && e.FamilyId == familyId.Value, ct);
+            if (!eventBelongsToFamily) return Results.NotFound();
 
             var attendee = await db.CalendarEventAttendees
                 .FirstOrDefaultAsync(a => a.EventId == eventId && a.UserId == userId.Value, ct);

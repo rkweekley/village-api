@@ -57,6 +57,8 @@ public class ChoresModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             var userId = httpContext.User.GetUserId();
             if (familyId == null) return Results.Unauthorized();
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
 
             var chore = new Chore
             {
@@ -136,6 +138,8 @@ public class ChoresModule : ICarterModule
         {
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
 
             var chore = await db.Chores
                 .FirstOrDefaultAsync(c => c.Id == id && c.FamilyId == familyId.Value, ct);
@@ -210,6 +214,8 @@ public class ChoresModule : ICarterModule
             if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+            var assigneeInFamily = await db.Users.AnyAsync(u => u.Id == request.AssignedToId && u.FamilyId == familyId.Value, ct);
+            if (!assigneeInFamily) return Results.BadRequest(new { error = "Assignee is not in your family." });
 
             var chore = await db.Chores
                 .FirstOrDefaultAsync(c => c.Id == choreId && c.FamilyId == familyId.Value, ct);

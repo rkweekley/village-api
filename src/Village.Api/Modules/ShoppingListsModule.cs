@@ -238,8 +238,10 @@ public class ShoppingListsModule : ICarterModule
             if (familyId == null) return Results.Unauthorized();
 
             var item = await db.ShoppingListItems
+                .Include(i => i.ShoppingList)
                 .FirstOrDefaultAsync(i => i.Id == itemId && i.ShoppingListId == listId, ct);
-            if (item == null) return Results.NotFound();
+            if (item == null || item.ShoppingList.FamilyId != familyId.Value)
+                return Results.NotFound();
 
             if (request.Name != null) item.Name = request.Name.Trim();
             if (request.Category != null) item.Category = request.Category?.Trim();
@@ -268,8 +270,10 @@ public class ShoppingListsModule : ICarterModule
             if (familyId == null) return Results.Unauthorized();
 
             var item = await db.ShoppingListItems
+                .Include(i => i.ShoppingList)
                 .FirstOrDefaultAsync(i => i.Id == itemId && i.ShoppingListId == listId, ct);
-            if (item == null) return Results.NotFound();
+            if (item == null || item.ShoppingList.FamilyId != familyId.Value)
+                return Results.NotFound();
 
             db.ShoppingListItems.Remove(item);
 

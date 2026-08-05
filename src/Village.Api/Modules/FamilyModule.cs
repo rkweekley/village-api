@@ -64,6 +64,8 @@ public class FamilyModule : ICarterModule
 
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+            var role = httpContext.User.GetRole();
+            if (role != "Parent") return Results.Forbid();
 
             var family = await db.Families.FindAsync(new object[] { familyId.Value }, ct);
             if (family == null) return Results.NotFound();

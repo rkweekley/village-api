@@ -151,22 +151,12 @@ public class NotificationsModule : ICarterModule
             var userId = httpContext.User.GetUserId();
             if (userId == null) return Results.Unauthorized();
 
-            // Use the request's family/user IDs if provided, otherwise use the
-            // authenticated user (for self-testing)
-            var familyId = request.FamilyId ?? Guid.Empty;
-            var targetUserId = request.UserId ?? userId.Value;
-
-            if (familyId == Guid.Empty)
-            {
-                // Look up the user's family from the DB
-                var user = await notificationService.LookupUserAsync(userId.Value);
-                if (user?.FamilyId == null) return Results.BadRequest("User has no family. Provide familyId.");
-                familyId = user.FamilyId;
-            }
+            var familyId = httpContext.User.GetFamilyId();
+            if (familyId == null) return Results.Unauthorized();
 
             var notification = await notificationService.CreateAsync(
-                familyId,
-                targetUserId,
+                familyId.Value,
+                userId.Value,
                 request.Type,
                 request.Title,
                 request.Body,
@@ -197,8 +187,6 @@ public record CreateNotificationRequest(
     string Title,
     string? Body = null,
     NotificationPriority Priority = NotificationPriority.Normal,
-    Guid? FamilyId = null,
-    Guid? UserId = null,
     string? ReferenceId = null,
     string? ReferenceType = null
 );

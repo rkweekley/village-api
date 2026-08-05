@@ -455,8 +455,10 @@ public class MealsModule : ICarterModule
             if (familyId == null) return Results.Unauthorized();
 
             var entry = await db.MealPlanEntries
+                .Include(e => e.MealPlan)
                 .FirstOrDefaultAsync(e => e.Id == entryId && e.MealPlanId == mealPlanId, ct);
-            if (entry == null) return Results.NotFound();
+            if (entry == null || entry.MealPlan.FamilyId != familyId.Value)
+                return Results.NotFound();
 
             db.MealPlanEntries.Remove(entry);
             await db.SaveChangesAsync(ct);
@@ -531,11 +533,13 @@ public class MealsModule : ICarterModule
             if (familyId == null) return Results.Unauthorized();
 
             var entry = await db.MealPlanEntries
+                .Include(e => e.MealPlan)
                 .Include(e => e.Recipe)
                 .Include(e => e.Votes)
                     .ThenInclude(v => v.FamilyMember)
                 .FirstOrDefaultAsync(e => e.Id == entryId && e.MealPlanId == mealPlanId, ct);
-            if (entry == null) return Results.NotFound();
+            if (entry == null || entry.MealPlan.FamilyId != familyId.Value)
+                return Results.NotFound();
 
             var votes = entry.Votes.Select(v => new
             {
