@@ -74,14 +74,16 @@ public class UserModule : ICarterModule
                 .ToListAsync(ct);
 
             var schoolWork = await db.SchoolWorks
+                .Include(w => w.Subject)
                 .Where(w => w.AssignedToId == userId.Value)
                 .Select(w => new
                 {
                     w.Id,
-                    w.Subject,
+                    Subject = w.Subject.Name,
                     w.Title,
                     Status = w.Status.ToString(),
-                    w.Grade,
+                    w.PointsEarned,
+                    w.PointsPossible,
                     w.CreatedAt
                 })
                 .ToListAsync(ct);
