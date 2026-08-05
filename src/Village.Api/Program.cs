@@ -91,9 +91,13 @@ builder.Services.AddCors(options =>
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionLogger>();
 
-// Rate limiting — protect auth endpoints from brute force
+// Rate limiting
+// - "Auth" policy (10 req/min): applied explicitly to login/register/refresh endpoints
+// - GlobalLimiter (200 req/min per user/IP): applies to all other endpoints
 builder.Services.AddRateLimiter(options =>
 {
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
     options.AddFixedWindowLimiter("Auth", config =>
     {
         config.PermitLimit = 10;
@@ -101,6 +105,21 @@ builder.Services.AddRateLimiter(options =>
         config.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         config.QueueLimit = 2;
     });
+
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.User.Identity?.IsAuthenticated == true
+                ? (httpContext.User.GetUserId()?.ToString()
+                   ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                   ?? "anon")
+                : (httpContext.Connection.RemoteIpAddress?.ToString() ?? "anon"),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 200,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 10
+            }));
 });
 
 // Register outermost pipeline wrapper to catch exceptions BEFORE DeveloperExceptionPage

@@ -62,6 +62,30 @@ public class UserModule : ICarterModule
                 })
                 .ToListAsync(ct);
 
+            var calendarAttendance = await db.CalendarEventAttendees
+                .Include(a => a.Event)
+                .Where(a => a.UserId == userId.Value)
+                .Select(a => new
+                {
+                    a.EventId,
+                    EventTitle = a.Event.Title,
+                    Status = a.Status.ToString()
+                })
+                .ToListAsync(ct);
+
+            var schoolWork = await db.SchoolWorks
+                .Where(w => w.AssignedToId == userId.Value)
+                .Select(w => new
+                {
+                    w.Id,
+                    w.Subject,
+                    w.Title,
+                    Status = w.Status.ToString(),
+                    w.Grade,
+                    w.CreatedAt
+                })
+                .ToListAsync(ct);
+
             return Results.Ok(new
             {
                 user = new
@@ -76,6 +100,8 @@ public class UserModule : ICarterModule
                 choreAssignments,
                 points,
                 rewardRedemptions,
+                calendarAttendance,
+                schoolWork,
                 exportedAt = DateTime.UtcNow
             });
         })
