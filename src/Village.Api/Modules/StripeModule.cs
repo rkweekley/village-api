@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Stripe;
 using Stripe.Checkout;
 using Village.Api.Extensions;
+using Village.Api.Services;
 using Village.Domain.Entities;
 using Village.Infrastructure.Data;
 
