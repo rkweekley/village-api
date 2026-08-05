@@ -35,6 +35,7 @@ public record ForgotPasswordRequest(
 
 public record ResetPasswordRequest(
     string Token,
+    string Email,
     string NewPassword
 );
 

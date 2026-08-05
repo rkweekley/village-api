@@ -225,29 +225,20 @@ public class AuthModule : ICarterModule
             var request = await httpContext.Request.ReadFromJsonAsync<ResetPasswordRequest>(ct);
             if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
 
-            var candidates = await db.Users
-                .Where(u => u.PasswordResetToken != null
-                            && u.PasswordResetTokenExpiresAt > DateTime.UtcNow)
-                .ToListAsync(ct);
+            // Look up by email (from the reset link) instead of scanning all users
+            var user = await db.Users.FirstOrDefaultAsync(u =>
+                u.Email == request.Email.ToLowerInvariant().Trim()
+                && u.PasswordResetToken != null
+                && u.PasswordResetTokenExpiresAt > DateTime.UtcNow, ct);
 
-            User? found = null;
-            foreach (var user in candidates)
-            {
-                if (BCrypt.Net.BCrypt.Verify(request.Token, user.PasswordResetToken))
-                {
-                    found = user;
-                    break;
-                }
-            }
-
-            if (found == null)
+            if (user == null || !BCrypt.Net.BCrypt.Verify(request.Token, user.PasswordResetToken))
                 return Results.BadRequest(new { error = "Invalid or expired reset token" });
 
-            found.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-            found.PasswordResetToken = null;
-            found.PasswordResetTokenExpiresAt = null;
-            found.RefreshToken = null;
-            found.RefreshTokenExpiresAt = null;
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            user.PasswordResetToken = null;
+            user.PasswordResetTokenExpiresAt = null;
+            user.RefreshToken = null;
+            user.RefreshTokenExpiresAt = null;
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(new { message = "Password reset successfully. Please log in." });
@@ -287,8 +278,8 @@ public class AuthModule : ICarterModule
     private static string GenerateInviteCode()
     {
         const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        var random = Random.Shared;
-        return new string(Enumerable.Range(0, 8).Select(_ => chars[random.Next(chars.Length)]).ToArray());
+        var bytes = RandomNumberGenerator.GetBytes(8);
+        return new string(bytes.Select(b => chars[b % chars.Length]).ToArray());
     }
 
     private static string GenerateResetToken()
