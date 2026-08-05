@@ -38,6 +38,10 @@ builder.Services.AddScoped<NotificationService>();
 // Email
 builder.Services.AddHttpClient<IEmailService, MailgunEmailService>();
 
+// Stripe
+Stripe.StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY")
+    ?? builder.Configuration["Stripe:SecretKey"];
+
 // Carter modules
 builder.Services.AddCarter();
 

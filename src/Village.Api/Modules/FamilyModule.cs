@@ -1,7 +1,6 @@
 using Carter;
 using Microsoft.EntityFrameworkCore;
 using Village.Api.Extensions;
-using Village.Api.Filters;
 using Village.Domain.Entities;
 using Village.Infrastructure.Data;
 

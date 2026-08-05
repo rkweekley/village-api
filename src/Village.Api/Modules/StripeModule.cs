@@ -1,0 +1,289 @@
+using Carter;
+using Microsoft.EntityFrameworkCore;
+using Stripe;
+using Stripe.Checkout;
+using Village.Api.Extensions;
+using Village.Domain.Entities;
+using Village.Infrastructure.Data;
+
+namespace Village.Api.Modules;
+
+public class StripeModule : ICarterModule
+{
+    public void AddRoutes(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/stripe");
+
+        // ── Webhook (called by Stripe, not users) ─────────────────
+        group.MapPost("/webhook", async (
+            HttpContext httpContext,
+            VillageDbContext db,
+            IConfiguration configuration,
+            CancellationToken ct) =>
+        {
+            var webhookSecret = Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET")
+                ?? configuration["Stripe:WebhookSecret"];
+            if (string.IsNullOrEmpty(webhookSecret))
+                return Results.Problem("Webhook secret not configured");
+
+            var json = await new StreamReader(httpContext.Request.Body).ReadToEndAsync(ct);
+            Event stripeEvent;
+            try
+            {
+                stripeEvent = EventUtility.ConstructEvent(
+                    json,
+                    httpContext.Request.Headers["Stripe-Signature"],
+                    webhookSecret
+                );
+            }
+            catch (StripeException)
+            {
+                return Results.BadRequest();
+            }
+
+            switch (stripeEvent.Type)
+            {
+                case "checkout.session.completed":
+                    await HandleCheckoutCompleted(stripeEvent, db, ct);
+                    break;
+
+                case "invoice.paid":
+                    await HandleInvoicePaid(stripeEvent, db, ct);
+                    break;
+
+                case "invoice.payment_failed":
+                    await HandlePaymentFailed(stripeEvent, db, ct);
+                    break;
+
+                case "customer.subscription.deleted":
+                    await HandleSubscriptionDeleted(stripeEvent, db, ct);
+                    break;
+
+                case "customer.subscription.updated":
+                    await HandleSubscriptionUpdated(stripeEvent, db, ct);
+                    break;
+            }
+
+            return Results.Ok();
+        })
+        .AllowAnonymous()
+        .WithDescription("Stripe webhook endpoint. Signature-verified.");
+
+        // ── Create Checkout Session ───────────────────────────────
+        group.MapPost("/create-checkout", async (
+            HttpContext httpContext,
+            VillageDbContext db,
+            IConfiguration configuration,
+            CancellationToken ct) =>
+        {
+            var request = await httpContext.Request.ReadFromJsonAsync<CreateCheckoutRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
+            var familyId = httpContext.User.GetFamilyId();
+            if (familyId == null) return Results.Unauthorized();
+
+            var family = await db.Families.FindAsync(new object[] { familyId.Value }, ct);
+            if (family == null) return Results.NotFound();
+
+            var priceId = request.Tier == "annual"
+                ? (Environment.GetEnvironmentVariable("STRIPE_PRICE_ANNUAL") ?? configuration["Stripe:PriceAnnual"])
+                : (Environment.GetEnvironmentVariable("STRIPE_PRICE_MONTHLY") ?? configuration["Stripe:PriceMonthly"]);
+
+            if (string.IsNullOrEmpty(priceId))
+                return Results.Problem("Price ID not configured");
+
+            var origin = httpContext.Request.Headers["Origin"].FirstOrDefault() ?? "https://villagefamily.app";
+
+            var options = new SessionCreateOptions
+            {
+                Mode = "subscription",
+                LineItems =
+                [
+                    new SessionLineItemOptions { Price = priceId, Quantity = 1 }
+                ],
+                SuccessUrl = $"{origin}/hub?session_id={{CHECKOUT_SESSION_ID}}",
+                CancelUrl = $"{origin}/family",
+                ClientReferenceId = familyId.Value.ToString(),
+                CustomerEmail = httpContext.User.GetEmail(),
+                AllowPromotionCodes = true,
+                Metadata = new Dictionary<string, string>
+                {
+                    ["familyId"] = familyId.Value.ToString(),
+                    ["tier"] = request.Tier
+                }
+            };
+
+            // If family already has a Stripe customer, reuse it
+            if (!string.IsNullOrEmpty(family.StripeCustomerId))
+                options.Customer = family.StripeCustomerId;
+
+            var service = new SessionService();
+            var session = await service.CreateAsync(options, cancellationToken: ct);
+
+            return Results.Ok(new { url = session.Url });
+        })
+        .RequireAuthorization()
+        .WithDescription("Create a Stripe Checkout session to subscribe.");
+
+        // ── Customer Portal ───────────────────────────────────────
+        group.MapPost("/portal", async (
+            HttpContext httpContext,
+            VillageDbContext db,
+            CancellationToken ct) =>
+        {
+            var familyId = httpContext.User.GetFamilyId();
+            if (familyId == null) return Results.Unauthorized();
+
+            var family = await db.Families.FindAsync(new object[] { familyId.Value }, ct);
+            if (family == null || string.IsNullOrEmpty(family.StripeCustomerId))
+                return Results.BadRequest(new { error = "No active subscription" });
+
+            var origin = httpContext.Request.Headers["Origin"].FirstOrDefault() ?? "https://villagefamily.app";
+
+            var options = new Stripe.BillingPortal.SessionCreateOptions
+            {
+                Customer = family.StripeCustomerId,
+                ReturnUrl = $"{origin}/family"
+            };
+
+            var service = new Stripe.BillingPortal.SessionService();
+            var session = await service.CreateAsync(options, cancellationToken: ct);
+
+            return Results.Ok(new { url = session.Url });
+        })
+        .RequireAuthorization()
+        .WithDescription("Open Stripe Customer Portal to manage subscription.");
+
+        // ── Subscription Status ───────────────────────────────────
+        group.MapGet("/status", async (
+            HttpContext httpContext,
+            VillageDbContext db,
+            CancellationToken ct) =>
+        {
+            var familyId = httpContext.User.GetFamilyId();
+            if (familyId == null) return Results.Unauthorized();
+
+            var family = await db.Families.FindAsync(new object[] { familyId.Value }, ct);
+            if (family == null) return Results.NotFound();
+
+            return Results.Ok(new
+            {
+                status = family.SubscriptionStatus,
+                tier = family.SubscriptionTier,
+                expiresAt = family.SubscriptionExpiresAt,
+                trialEndsAt = family.TrialEndsAt,
+                isInTrial = family.SubscriptionStatus == "trial",
+                isExpiringSoon = family.TrialEndsAt > DateTime.UtcNow
+                    && family.TrialEndsAt < DateTime.UtcNow.AddDays(3)
+            });
+        })
+        .RequireAuthorization()
+        .WithDescription("Get the family's current subscription status.");
+    }
+
+    // ── Webhook Handlers ─────────────────────────────────────────
+
+    private static async Task HandleCheckoutCompleted(Event stripeEvent, VillageDbContext db, CancellationToken ct)
+    {
+        var session = stripeEvent.Data.Object as Session;
+        if (session?.ClientReferenceId == null) return;
+
+        var familyId = Guid.Parse(session.ClientReferenceId);
+        var family = await db.Families.FindAsync(new object[] { familyId }, ct);
+        if (family == null) return;
+
+        // Only provision if this is a new subscription (not already provisioned)
+        if (family.SubscriptionStatus == "active" && family.StripeSubscriptionId == session.SubscriptionId)
+            return;
+
+        family.StripeCustomerId = session.CustomerId;
+        family.StripeSubscriptionId = session.SubscriptionId;
+        family.SubscriptionStatus = "active";
+        family.SubscriptionTier = session.Metadata.GetValueOrDefault("tier", "monthly");
+        family.SubscriptionExpiresAt = DateTime.UtcNow.AddMonths(
+            family.SubscriptionTier == "annual" ? 12 : 1);
+
+        db.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            FamilyId = familyId,
+            UserId = Guid.Empty,
+            EntityType = "Subscription",
+            EntityId = session.SubscriptionId,
+            Action = "created",
+            Changes = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                tier = family.SubscriptionTier,
+                customerId = session.CustomerId
+            }),
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task HandleInvoicePaid(Event stripeEvent, VillageDbContext db, CancellationToken ct)
+    {
+        var invoice = stripeEvent.Data.Object as Invoice;
+        if (invoice?.SubscriptionId == null) return;
+
+        var family = await db.Families
+            .FirstOrDefaultAsync(f => f.StripeSubscriptionId == invoice.SubscriptionId, ct);
+        if (family == null) return;
+
+        family.SubscriptionStatus = "active";
+        family.SubscriptionExpiresAt = DateTime.UtcNow.AddMonths(
+            family.SubscriptionTier == "annual" ? 12 : 1);
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task HandlePaymentFailed(Event stripeEvent, VillageDbContext db, CancellationToken ct)
+    {
+        var invoice = stripeEvent.Data.Object as Invoice;
+        if (invoice?.SubscriptionId == null) return;
+
+        var family = await db.Families
+            .FirstOrDefaultAsync(f => f.StripeSubscriptionId == invoice.SubscriptionId, ct);
+        if (family == null) return;
+
+        family.SubscriptionStatus = "past_due";
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task HandleSubscriptionDeleted(Event stripeEvent, VillageDbContext db, CancellationToken ct)
+    {
+        var subscription = stripeEvent.Data.Object as Subscription;
+        if (subscription?.Id == null) return;
+
+        var family = await db.Families
+            .FirstOrDefaultAsync(f => f.StripeSubscriptionId == subscription.Id, ct);
+        if (family == null) return;
+
+        family.SubscriptionStatus = "canceled";
+        family.StripeSubscriptionId = null;
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task HandleSubscriptionUpdated(Event stripeEvent, VillageDbContext db, CancellationToken ct)
+    {
+        var subscription = stripeEvent.Data.Object as Subscription;
+        if (subscription?.Id == null) return;
+
+        var family = await db.Families
+            .FirstOrDefaultAsync(f => f.StripeSubscriptionId == subscription.Id, ct);
+        if (family == null) return;
+
+        // Detect tier change
+        if (subscription.Items.Data.Count > 0)
+        {
+            var priceId = subscription.Items.Data[0].Price.Id;
+            var isAnnual = priceId.Contains("annual", StringComparison.OrdinalIgnoreCase);
+            family.SubscriptionTier = isAnnual ? "annual" : "monthly";
+        }
+
+        family.SubscriptionExpiresAt = subscription.CurrentPeriodEnd;
+        await db.SaveChangesAsync(ct);
+    }
+}
+
+public record CreateCheckoutRequest(string Tier); // "monthly" or "annual"
