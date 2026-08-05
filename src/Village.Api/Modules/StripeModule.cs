@@ -244,11 +244,12 @@ public class StripeModule : ICarterModule
     private static async Task HandleInvoicePaid(
         Event stripeEvent, VillageDbContext db, ILogger<StripeModule> logger, CancellationToken ct)
     {
-        var invoice = stripeEvent.Data.Object as Invoice;
-        if (invoice?.SubscriptionId == null) return;
+        if (stripeEvent.Data.Object is not Invoice invoice) return;
+        var subscriptionId = invoice.RawJObject["subscription"]?.ToString();
+        if (string.IsNullOrEmpty(subscriptionId)) return;
 
         var family = await db.Families
-            .FirstOrDefaultAsync(f => f.StripeSubscriptionId == invoice.SubscriptionId, ct);
+            .FirstOrDefaultAsync(f => f.StripeSubscriptionId == subscriptionId, ct);
         if (family == null) return;
 
         logger.LogInformation("Invoice paid for family {FamilyId}", family.Id);
@@ -262,11 +263,12 @@ public class StripeModule : ICarterModule
     private static async Task HandlePaymentFailed(
         Event stripeEvent, VillageDbContext db, ILogger<StripeModule> logger, CancellationToken ct)
     {
-        var invoice = stripeEvent.Data.Object as Invoice;
-        if (invoice?.SubscriptionId == null) return;
+        if (stripeEvent.Data.Object is not Invoice invoice) return;
+        var subscriptionId = invoice.RawJObject["subscription"]?.ToString();
+        if (string.IsNullOrEmpty(subscriptionId)) return;
 
         var family = await db.Families
-            .FirstOrDefaultAsync(f => f.StripeSubscriptionId == invoice.SubscriptionId, ct);
+            .FirstOrDefaultAsync(f => f.StripeSubscriptionId == subscriptionId, ct);
         if (family == null) return;
 
         logger.LogWarning("Payment failed for family {FamilyId}", family.Id);
@@ -312,7 +314,9 @@ public class StripeModule : ICarterModule
             family.SubscriptionTier = isAnnual ? "annual" : "monthly";
         }
 
-        family.SubscriptionExpiresAt = subscription.CurrentPeriodEnd;
+        family.SubscriptionExpiresAt = subscription.RawJObject["current_period_end"] != null
+            ? DateTimeOffset.FromUnixTimeSeconds((long)subscription.RawJObject["current_period_end"]).UtcDateTime
+            : DateTime.UtcNow.AddMonths(1);
         await db.SaveChangesAsync(ct);
     }
 }
