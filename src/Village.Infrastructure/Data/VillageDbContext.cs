@@ -38,6 +38,8 @@ public class VillageDbContext : DbContext
             e.HasKey(f => f.Id);
             e.HasIndex(f => f.InviteCode).IsUnique();
             e.Property(f => f.Name).HasMaxLength(100);
+            e.HasOne<User>().WithMany().HasForeignKey(f => f.SubscriptionCanceledByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         // User

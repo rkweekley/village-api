@@ -8,6 +8,8 @@ public interface IEmailService
     Task SendInviteEmailAsync(string email, string familyName, string inviteCode);
     Task SendWelcomeEmailAsync(string email, string displayName, string familyName);
     Task SendNewSignupAlertAsync(string email, string displayName, string familyName);
+    Task SendSubscriptionCancelScheduledAsync(string email, string displayName, DateTime endDate);
+    Task SendSubscriptionCanceledAlertAsync(string email, string displayName, string familyName, DateTime endDate);
 }
 
 public class MailgunEmailService : IEmailService
@@ -94,6 +96,44 @@ public class MailgunEmailService : IEmailService
                    $"<p><strong>{displayName}</strong> ({email}) just created the family <strong>{familyName}</strong>.</p>" +
                    "<p><em>— Village Bot</em></p>";
         await SendEmailAsync("info@cyberalsolutions.com", $"New signup: {displayName} — {familyName}", html);
+    }
+
+    public async Task SendSubscriptionCancelScheduledAsync(string email, string displayName, DateTime endDate)
+    {
+        if (!IsConfigured)
+        {
+            _logger.LogWarning("Cannot send cancel email — Mailgun not configured for {Email}", email);
+            return;
+        }
+
+        var endDateStr = endDate.ToString("MMMM d, yyyy");
+        var html = $"<h2>Subscription cancellation scheduled</h2>" +
+                   $"<p>Hi {displayName},</p>" +
+                   $"<p>Your Village subscription has been scheduled for cancellation. " +
+                   $"Your access will continue until <strong>{endDateStr}</strong>.</p>" +
+                   "<p>Until then, you'll still have full access to all features — chores, rewards, " +
+                   "meal planning, shopping lists, and more.</p>" +
+                   "<p>If you change your mind, you can resubscribe anytime from your Family settings.</p>" +
+                   "<p>We're sorry to see you go! If there's anything we can do to help, just reply to this email.</p>" +
+                   "<p>— The Village Team</p>";
+        await SendEmailAsync(email, $"Your Village subscription ends {endDateStr}", html);
+    }
+
+    public async Task SendSubscriptionCanceledAlertAsync(string email, string displayName, string familyName, DateTime endDate)
+    {
+        if (!IsConfigured)
+        {
+            _logger.LogWarning("Cannot send cancel alert — Mailgun not configured");
+            return;
+        }
+
+        var endDateStr = endDate.ToString("MMMM d, yyyy");
+        var html = $"<h3>Subscription Canceled</h3>" +
+                   $"<p><strong>{displayName}</strong> ({email}) from family <strong>{familyName}</strong> " +
+                   $"has canceled their subscription. Access ends <strong>{endDateStr}</strong>.</p>" +
+                   "<p><em>— Village Bot</em></p>";
+        await SendEmailAsync("info@cyberalsolutions.com",
+            $"Canceled: {displayName} — {familyName} (ends {endDateStr})", html);
     }
 
     private async Task SendEmailAsync(string to, string subject, string html)

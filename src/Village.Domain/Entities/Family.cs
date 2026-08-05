@@ -12,6 +12,8 @@ public class Family
     public string SubscriptionStatus { get; set; } = "trial";
     public string? SubscriptionTier { get; set; }
     public DateTime? SubscriptionExpiresAt { get; set; }
+    public DateTime? SubscriptionCanceledAt { get; set; }
+    public Guid? SubscriptionCanceledByUserId { get; set; }
     public DateTime TrialEndsAt { get; set; } = DateTime.UtcNow.AddDays(14);
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

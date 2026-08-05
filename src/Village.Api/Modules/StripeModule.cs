@@ -170,6 +170,86 @@ public class StripeModule : ICarterModule
         .RequireAuthorization()
         .WithDescription("Open Stripe Customer Portal to manage subscription.");
 
+        // ── Cancel Subscription (at period end) ─────────────────
+        group.MapPost("/cancel", async (
+            HttpContext httpContext,
+            VillageDbContext db,
+            IConfiguration configuration,
+            CancellationToken ct) =>
+        {
+            var familyId = httpContext.User.GetFamilyId();
+            var userId = httpContext.User.GetUserId();
+            if (familyId == null || userId == null) return Results.Unauthorized();
+
+            var family = await db.Families.FindAsync(new object[] { familyId.Value }, ct);
+            if (family == null) return Results.NotFound();
+            if (string.IsNullOrEmpty(family.StripeSubscriptionId))
+                return Results.BadRequest(new { error = "No active subscription to cancel." });
+
+            StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY")
+                ?? configuration["Stripe:SecretKey"];
+
+            try
+            {
+                var service = new Stripe.SubscriptionService();
+                var subscription = await service.GetAsync(family.StripeSubscriptionId, cancellationToken: ct);
+
+                // Schedule cancellation at period end — keeps access until the paid period expires
+                var updateOptions = new Stripe.SubscriptionUpdateOptions
+                {
+                    CancelAtPeriodEnd = true
+                };
+                await service.UpdateAsync(family.StripeSubscriptionId, updateOptions, cancellationToken: ct);
+
+                var endDate = subscription.RawJObject["current_period_end"] != null
+                    ? DateTimeOffset.FromUnixTimeSeconds((long)subscription.RawJObject["current_period_end"]!).UtcDateTime
+                    : DateTime.UtcNow.AddMonths(1);
+
+                family.SubscriptionCanceledAt = DateTime.UtcNow;
+                family.SubscriptionCanceledByUserId = userId.Value;
+                // Status stays "active" — Stripe webhook will set "canceled" when period ends
+                await db.SaveChangesAsync(ct);
+
+                // Fire-and-forget: send emails
+                var cancelingUser = await db.Users.FindAsync(new object[] { userId.Value }, ct);
+                var emailService = httpContext.RequestServices.GetService<IEmailService>();
+                if (emailService != null && cancelingUser != null)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await emailService.SendSubscriptionCancelScheduledAsync(
+                                cancelingUser.Email, cancelingUser.DisplayName, endDate);
+                        }
+                        catch (Exception) { }
+                    });
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await emailService.SendSubscriptionCanceledAlertAsync(
+                                cancelingUser.Email, cancelingUser.DisplayName, family.Name, endDate);
+                        }
+                        catch (Exception) { }
+                    });
+                }
+
+                return Results.Ok(new
+                {
+                    message = "Subscription will be canceled at the end of your billing period.",
+                    status = "active",
+                    endDate = endDate
+                });
+            }
+            catch (StripeException ex)
+            {
+                return Results.BadRequest(new { error = ex.StripeError?.Message ?? "Failed to cancel subscription." });
+            }
+        })
+        .RequireAuthorization()
+        .WithDescription("Schedule subscription cancellation at the end of the current billing period.");
+
         // ── Subscription Status ───────────────────────────────────
         group.MapGet("/status", async (
             HttpContext httpContext,
