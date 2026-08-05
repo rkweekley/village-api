@@ -97,6 +97,10 @@ public class StripeModule : ICarterModule
             var options = new SessionCreateOptions
             {
                 Mode = "subscription",
+                SubscriptionData = new SessionSubscriptionDataOptions
+                {
+                    TrialPeriodDays = 30,
+                },
                 LineItems =
                 [
                     new SessionLineItemOptions { Price = priceId, Quantity = 1 }
