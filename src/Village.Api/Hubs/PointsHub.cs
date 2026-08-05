@@ -8,6 +8,9 @@ public class PointsHub : Hub
 {
     public async Task JoinPointsGroup(string familyId)
     {
+        var userFamilyId = Context.User?.FindFirst("family_id")?.Value;
+        if (userFamilyId != familyId) throw new HubException("Forbidden");
+
         await Groups.AddToGroupAsync(Context.ConnectionId, $"points:{familyId}");
     }
 

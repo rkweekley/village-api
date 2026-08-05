@@ -219,6 +219,12 @@ public class CalendarEventsModule : ICarterModule
             // Update attendees if specified
             if (request.AttendeeIds != null)
             {
+                // Validate all attendees belong to this family
+                foreach (var attendeeId in request.AttendeeIds)
+                {
+                    if (!await db.Users.AnyAsync(u => u.Id == attendeeId && u.FamilyId == familyId.Value, ct))
+                        return Results.BadRequest(new { error = $"Attendee {attendeeId} is not in your family." });
+                }
                 db.CalendarEventAttendees.RemoveRange(evt.Attendees);
                 foreach (var attendeeId in request.AttendeeIds)
                 {

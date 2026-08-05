@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using System.Security.Claims;
 
 namespace Village.Api.Hubs;
 
@@ -12,6 +13,9 @@ public class NotificationsHub : Hub
     /// </summary>
     public async Task JoinNotificationGroup(string userId)
     {
+        var claimUserId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (claimUserId != userId) throw new HubException("Forbidden");
+
         await Groups.AddToGroupAsync(Context.ConnectionId, $"user:{userId}");
     }
 

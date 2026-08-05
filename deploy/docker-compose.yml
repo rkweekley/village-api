@@ -3,30 +3,25 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    ports:
-      - "8080:8080"
-    environment:
-      - ConnectionStrings__Default=Host=db;Database=village;Username=app;Password=password
-      - ConnectionStrings__Hangfire=Host=db;Database=village_hangfire;Username=app;Password=password
-      - ConnectionStrings__Redis=redis:6379
-      - Jwt__Secret=dev-secret-change-in-production-min-32-chars!!
-      - Jwt__Issuer=village.app
-      - Jwt__Audience=village.app
+    restart: unless-stopped
+    env_file:
+      - ./api.env
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
-    restart: unless-stopped
+        condition: service_healthy
 
   db:
     image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: village
-    ports:
-      - "5432:5432"
+    restart: unless-stopped
+    env_file:
+      - ./postgres.env
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -34,13 +29,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   pgdata:
+  redisdata:

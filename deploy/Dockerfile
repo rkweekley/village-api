@@ -27,4 +27,9 @@ ENV ASPNETCORE_ENVIRONMENT=Production
 
 COPY --from=build /app/publish .
 
+USER app
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD curl --fail http://localhost:8080/health || exit 1
+
 ENTRYPOINT ["dotnet", "Village.Api.dll"]

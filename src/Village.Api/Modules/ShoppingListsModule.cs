@@ -123,6 +123,9 @@ public class ShoppingListsModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
+
             var list = await db.ShoppingLists
                 .Include(s => s.Items)
                 .FirstOrDefaultAsync(s => s.Id == id && s.FamilyId == familyId.Value, ct);

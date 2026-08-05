@@ -54,6 +54,9 @@ public class SchoolModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
+
             var subject = new SchoolSubject
             {
                 Id = Guid.NewGuid(),
@@ -147,6 +150,11 @@ public class SchoolModule : ICarterModule
             var subject = await db.SchoolSubjects
                 .FirstOrDefaultAsync(s => s.Id == request.SubjectId && s.FamilyId == familyId.Value, ct);
             if (subject == null) return Results.NotFound(new { error = "Subject not found" });
+
+            var assigneeInFamily = await db.Users.AnyAsync(
+                u => u.Id == request.AssignedToId && u.FamilyId == familyId.Value, ct);
+            if (!assigneeInFamily)
+                return Results.BadRequest(new { error = "Assignee is not in your family." });
 
             var work = new SchoolWork
             {

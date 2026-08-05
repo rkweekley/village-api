@@ -37,6 +37,7 @@ public class VillageDbContext : DbContext
         {
             e.HasKey(f => f.Id);
             e.HasIndex(f => f.InviteCode).IsUnique();
+            e.Property(f => f.Name).HasMaxLength(100);
         });
 
         // User
@@ -44,6 +45,8 @@ public class VillageDbContext : DbContext
         {
             e.HasKey(u => u.Id);
             e.HasIndex(u => u.Email).IsUnique();
+            e.Property(u => u.Email).HasMaxLength(254);
+            e.Property(u => u.DisplayName).HasMaxLength(100);
             e.HasOne(u => u.Family)
                 .WithMany(f => f.Members)
                 .HasForeignKey(u => u.FamilyId)
@@ -54,6 +57,7 @@ public class VillageDbContext : DbContext
         modelBuilder.Entity<Chore>(e =>
         {
             e.HasKey(c => c.Id);
+            e.Property(c => c.Name).HasMaxLength(200);
             e.HasOne(c => c.Family)
                 .WithMany()
                 .HasForeignKey(c => c.FamilyId)
@@ -75,7 +79,7 @@ public class VillageDbContext : DbContext
             e.HasOne(a => a.AssignedTo)
                 .WithMany()
                 .HasForeignKey(a => a.AssignedToId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(a => new { a.ChoreId, a.AssignedToId, a.DueDate });
         });
 
@@ -90,11 +94,12 @@ public class VillageDbContext : DbContext
             e.HasOne(c => c.CompletedBy)
                 .WithMany()
                 .HasForeignKey(c => c.CompletedById)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             e.HasOne(c => c.ApprovedBy)
                 .WithMany()
                 .HasForeignKey(c => c.ApprovedById)
                 .OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(c => c.ChoreAssignmentId);
             e.HasIndex(c => c.ApprovalStatus);
         });
 
@@ -119,7 +124,7 @@ public class VillageDbContext : DbContext
             e.HasOne(r => r.User)
                 .WithMany()
                 .HasForeignKey(r => r.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             e.HasOne(r => r.ApprovedBy)
                 .WithMany()
                 .HasForeignKey(r => r.ApprovedById)
@@ -137,7 +142,7 @@ public class VillageDbContext : DbContext
             e.HasOne(p => p.User)
                 .WithMany()
                 .HasForeignKey(p => p.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(p => new { p.UserId, p.CreatedAt });
         });
 
@@ -145,6 +150,7 @@ public class VillageDbContext : DbContext
         modelBuilder.Entity<CalendarEvent>(e =>
         {
             e.HasKey(c => c.Id);
+            e.Property(c => c.Title).HasMaxLength(200);
             e.HasOne(c => c.Family)
                 .WithMany()
                 .HasForeignKey(c => c.FamilyId)
@@ -152,7 +158,7 @@ public class VillageDbContext : DbContext
             e.HasOne(c => c.Organizer)
                 .WithMany()
                 .HasForeignKey(c => c.OrganizerId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(c => new { c.FamilyId, c.StartTime });
         });
 
@@ -188,6 +194,8 @@ public class VillageDbContext : DbContext
                 .WithMany(s => s.Items)
                 .HasForeignKey(i => i.ShoppingListId)
                 .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(i => i.ShoppingListId);
+            e.Property(i => i.Name).HasMaxLength(200);
         });
 
         // AuditLog
@@ -229,7 +237,7 @@ public class VillageDbContext : DbContext
             e.HasOne(r => r.CreatedBy)
                 .WithMany()
                 .HasForeignKey(r => r.CreatedById)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(r => new { r.FamilyId, r.Title });
         });
 
@@ -244,7 +252,7 @@ public class VillageDbContext : DbContext
             e.HasOne(m => m.CreatedBy)
                 .WithMany()
                 .HasForeignKey(m => m.CreatedById)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(m => new { m.FamilyId, m.WeekStart });
         });
 
@@ -274,7 +282,7 @@ public class VillageDbContext : DbContext
             e.HasOne(v => v.FamilyMember)
                 .WithMany()
                 .HasForeignKey(v => v.FamilyMemberId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(v => new { v.MealPlanEntryId, v.FamilyMemberId }).IsUnique();
         });
 

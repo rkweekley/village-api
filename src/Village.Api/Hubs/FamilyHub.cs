@@ -8,6 +8,9 @@ public class FamilyHub : Hub
 {
     public async Task JoinFamilyGroup(string familyId)
     {
+        var userFamilyId = Context.User?.FindFirst("family_id")?.Value;
+        if (userFamilyId != familyId) throw new HubException("Forbidden");
+
         await Groups.AddToGroupAsync(Context.ConnectionId, $"family:{familyId}");
     }
 

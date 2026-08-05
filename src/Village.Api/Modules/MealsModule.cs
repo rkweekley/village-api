@@ -164,6 +164,9 @@ public class MealsModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
+
             var recipe = await db.Recipes
                 .FirstOrDefaultAsync(r => r.Id == id && r.FamilyId == familyId.Value, ct);
             if (recipe == null) return Results.NotFound();
@@ -212,6 +215,9 @@ public class MealsModule : ICarterModule
         {
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
 
             var recipe = await db.Recipes
                 .FirstOrDefaultAsync(r => r.Id == id && r.FamilyId == familyId.Value, ct);
@@ -453,6 +459,9 @@ public class MealsModule : ICarterModule
         {
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
 
             var entry = await db.MealPlanEntries
                 .Include(e => e.MealPlan)

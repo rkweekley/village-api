@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using Village.Api.Extensions;
@@ -125,7 +126,17 @@ builder.Services.AddRateLimiter(options =>
 // Register outermost pipeline wrapper to catch exceptions BEFORE DeveloperExceptionPage
 builder.Services.AddSingleton<IStartupFilter, ExceptionLoggingStartupFilter>();
 
+// Forwarded headers for correct IP/protocol detection behind reverse proxy
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 app.UseExceptionHandler(); // calls registered IExceptionHandler services
 app.UseStatusCodePages();
@@ -161,7 +172,8 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.UseCors("Prod");
+    if (prodOrigins.Length > 0)
+        app.UseCors("Prod");
 }
 
 app.UseAuthentication();
@@ -209,17 +221,9 @@ app.MapGet("/health", async (Village.Infrastructure.Data.VillageDbContext db, Ht
     });
 }).AllowAnonymous();
 
-// Apply pending migrations on startup
+// Auto-migrate in development only — production migrations are a separate deployment step
 if (app.Environment.IsDevelopment())
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<VillageDbContext>();
-    await db.Database.MigrateAsync();
-    await Village.Infrastructure.Data.DbInitializer.SeedAsync(db);
-}
-else
-{
-    // Apply migrations in production too
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<VillageDbContext>();
     await db.Database.MigrateAsync();

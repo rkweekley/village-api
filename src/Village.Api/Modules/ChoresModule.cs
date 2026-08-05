@@ -268,12 +268,14 @@ public class ChoresModule : ICarterModule
             var request = await httpContext.Request.ReadFromJsonAsync<CompleteChoreRequest>(ct);
             if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var userId = httpContext.User.GetUserId();
+            var familyId = httpContext.User.GetFamilyId();
             if (userId == null) return Results.Unauthorized();
+            if (familyId == null) return Results.Unauthorized();
 
             var assignment = await db.ChoreAssignments
                 .Include(a => a.Chore)
                 .Include(a => a.AssignedTo)
-                .FirstOrDefaultAsync(a => a.Id == assignmentId, ct);
+                .FirstOrDefaultAsync(a => a.Id == assignmentId && a.Chore.FamilyId == familyId.Value, ct);
             if (assignment == null) return Results.NotFound();
 
             if (assignment.AssignedToId != userId.Value)
