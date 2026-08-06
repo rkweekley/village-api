@@ -1,5 +1,6 @@
 using Carter;
 using Microsoft.EntityFrameworkCore;
+using Village.Api.Dtos.Auth;
 using Village.Api.Extensions;
 using Village.Domain.Entities;
 using Village.Infrastructure.Data;
@@ -11,6 +12,65 @@ public class UserModule : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/users").RequireAuthorization();
+
+        // ── Profile Update ───────────────────────────────────
+        group.MapPut("/me", async (
+            HttpContext http,
+            VillageDbContext db,
+            CancellationToken ct) =>
+        {
+            var request = await http.Request.ReadFromJsonAsync<UpdateProfileRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
+            var userId = http.User.GetUserId();
+            if (userId == null) return Results.Unauthorized();
+
+            var user = await db.Users.FindAsync(new object[] { userId.Value }, ct);
+            if (user == null) return Results.NotFound();
+
+            // Validate at least one field is provided
+            if (request.DisplayName == null && request.Email == null && request.BirthDate == null)
+                return Results.BadRequest(new { error = "At least one field must be provided." });
+
+            // Update display name
+            if (request.DisplayName != null)
+            {
+                if (string.IsNullOrWhiteSpace(request.DisplayName))
+                    return Results.BadRequest(new { error = "Display name cannot be empty." });
+                user.DisplayName = request.DisplayName.Trim();
+            }
+
+            // Update email (check uniqueness)
+            if (request.Email != null)
+            {
+                if (string.IsNullOrWhiteSpace(request.Email))
+                    return Results.BadRequest(new { error = "Email cannot be empty." });
+                var normalized = request.Email.Trim().ToLowerInvariant();
+                var existingUser = await db.Users
+                    .FirstOrDefaultAsync(u => u.Email == normalized && u.Id != userId.Value, ct);
+                if (existingUser != null)
+                    return Results.Conflict(new { error = "Email is already in use by another account." });
+                user.Email = normalized;
+            }
+
+            // Update birth date
+            if (request.BirthDate != null)
+                user.BirthDate = request.BirthDate;
+
+            user.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new UserInfoResponse(
+                Id: user.Id,
+                DisplayName: user.DisplayName,
+                Email: user.Email,
+                Role: user.Role.ToString(),
+                PointsBalance: user.PointsBalance,
+                BirthDate: user.BirthDate,
+                FamilyId: user.FamilyId
+            ));
+        })
+        .WithDescription("Update the current user's profile (display name, email, birth date).");
 
         // ── Data Export (GDPR right-to-access) ──────────────────
         group.MapGet("/me/export", async (
@@ -137,3 +197,11 @@ public class UserModule : ICarterModule
         .WithDescription("Deactivate account and anonymize personal data (GDPR right-to-delete).");
     }
 }
+
+// ── Request DTO ──
+
+public record UpdateProfileRequest(
+    string? DisplayName,
+    string? Email,
+    DateOnly? BirthDate
+);
