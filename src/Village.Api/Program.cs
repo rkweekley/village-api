@@ -188,6 +188,7 @@ app.MapHub<Village.Api.Hubs.FamilyHub>("/hubs/family");
 app.MapHub<Village.Api.Hubs.ChoreHub>("/hubs/chores");
 app.MapHub<Village.Api.Hubs.PointsHub>("/hubs/points");
 app.MapHub<Village.Api.Hubs.NotificationsHub>("/hubs/notifications");
+app.MapHub<Village.Api.Hubs.ShoppingHub>("/hubs/shopping");
 
 // Health check
 app.MapGet("/health", async (Village.Infrastructure.Data.VillageDbContext db, HttpContext http) =>

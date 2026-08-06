@@ -50,6 +50,7 @@ public class ChoresModule : ICarterModule
         group.MapPost("/", async (
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<ChoreHub> choreHub,
             CancellationToken ct) =>
         {
             var request = await httpContext.Request.ReadFromJsonAsync<CreateChoreRequest>(ct);
@@ -80,6 +81,20 @@ public class ChoresModule : ICarterModule
             db.Chores.Add(chore);
             await db.SaveChangesAsync(ct);
 
+            // Real-time: notify family of new chore
+            _ = choreHub.NotifyChoreGroup(familyId.Value.ToString(), HubMethods.ChoreCreated, new
+            {
+                chore.Id,
+                chore.Name,
+                chore.Description,
+                chore.PointValue,
+                Recurrence = chore.Recurrence.ToString(),
+                Difficulty = chore.Difficulty.ToString(),
+                chore.RequiresApproval,
+                chore.RequiresPhoto,
+                CreatedById = chore.CreatedById.HasValue ? chore.CreatedById.Value.ToString() : null
+            });
+
             return Results.Created($"/api/chores/{chore.Id}", new
             {
                 chore.Id,
@@ -95,6 +110,7 @@ public class ChoresModule : ICarterModule
             Guid id,
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<ChoreHub> choreHub,
             CancellationToken ct) =>
         {
             var request = await httpContext.Request.ReadFromJsonAsync<UpdateChoreRequest>(ct);
@@ -124,6 +140,22 @@ public class ChoresModule : ICarterModule
             chore.UpdatedAt = DateTime.UtcNow;
 
             await db.SaveChangesAsync(ct);
+
+            // Real-time: notify family of chore update
+            _ = choreHub.NotifyChoreGroup(familyId.Value.ToString(), HubMethods.ChoreUpdated, new
+            {
+                chore.Id,
+                chore.Name,
+                chore.Description,
+                chore.PointValue,
+                Recurrence = chore.Recurrence.ToString(),
+                Difficulty = chore.Difficulty.ToString(),
+                chore.RequiresApproval,
+                chore.RequiresPhoto,
+                chore.IsActive,
+                CreatedById = chore.CreatedById.HasValue ? chore.CreatedById.Value.ToString() : null
+            });
+
             return Results.Ok(new { chore.Id, chore.Name });
         })
         .Accepts<UpdateChoreRequest>("application/json")
@@ -134,6 +166,7 @@ public class ChoresModule : ICarterModule
             Guid id,
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<ChoreHub> choreHub,
             CancellationToken ct) =>
         {
             var familyId = httpContext.User.GetFamilyId();
@@ -148,6 +181,13 @@ public class ChoresModule : ICarterModule
             chore.IsActive = false;
             chore.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
+
+            // Real-time: notify family of chore deletion
+            _ = choreHub.NotifyChoreGroup(familyId.Value.ToString(), HubMethods.ChoreDeleted, new
+            {
+                chore.Id,
+                chore.Name
+            });
 
             return Results.NoContent();
         })

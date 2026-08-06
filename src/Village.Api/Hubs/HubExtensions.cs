@@ -4,6 +4,9 @@ namespace Village.Api.Hubs;
 
 public static class HubMethods
 {
+    public const string ChoreCreated = "ChoreCreated";
+    public const string ChoreUpdated = "ChoreUpdated";
+    public const string ChoreDeleted = "ChoreDeleted";
     public const string ChoreAssigned = "ChoreAssigned";
     public const string ChoreCompleted = "ChoreCompleted";
     public const string ChoreApproved = "ChoreApproved";
@@ -15,6 +18,12 @@ public static class HubMethods
     public const string FamilyUpdated = "FamilyUpdated";
     public const string MemberJoined = "MemberJoined";
     public const string MemberLeft = "MemberLeft";
+    public const string ShoppingListCreated = "ShoppingListCreated";
+    public const string ShoppingListDeleted = "ShoppingListDeleted";
+    public const string ShoppingItemAdded = "ShoppingItemAdded";
+    public const string ShoppingItemToggled = "ShoppingItemToggled";
+    public const string ShoppingItemUpdated = "ShoppingItemUpdated";
+    public const string ShoppingItemDeleted = "ShoppingItemDeleted";
 }
 
 public static class HubExtensions
@@ -41,5 +50,17 @@ public static class HubExtensions
         T arg)
     {
         await hub.Clients.Group($"points:{familyId}").SendAsync(method, arg);
+    }
+
+    /// <summary>
+    /// Send a shopping-related notification to the family's shopping group.
+    /// </summary>
+    public static async Task NotifyShoppingGroup<T>(
+        this IHubContext<ShoppingHub> hub,
+        string familyId,
+        string method,
+        T arg)
+    {
+        await hub.Clients.Group($"shopping:{familyId}").SendAsync(method, arg);
     }
 }

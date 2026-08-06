@@ -1,6 +1,8 @@
 using Carter;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using Village.Api.Extensions;
+using Village.Api.Hubs;
 using Village.Domain.Entities;
 using Village.Infrastructure.Data;
 
@@ -43,6 +45,7 @@ public class ShoppingListsModule : ICarterModule
         group.MapPost("/", async (
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<ShoppingHub> shoppingHub,
             CancellationToken ct) =>
         {
             var request = await httpContext.Request.ReadFromJsonAsync<CreateShoppingListRequest>(ct);
@@ -62,6 +65,17 @@ public class ShoppingListsModule : ICarterModule
 
             db.ShoppingLists.Add(list);
             await db.SaveChangesAsync(ct);
+
+            // Real-time: notify family of new list
+            _ = shoppingHub.NotifyShoppingGroup(familyId.Value.ToString(), HubMethods.ShoppingListCreated, new
+            {
+                list.Id,
+                list.Name,
+                list.CreatedAt,
+                list.UpdatedAt,
+                ItemCount = 0,
+                CheckedCount = 0
+            });
 
             return Results.Created($"/api/shopping/{list.Id}", new
             {
@@ -118,6 +132,7 @@ public class ShoppingListsModule : ICarterModule
             Guid id,
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<ShoppingHub> shoppingHub,
             CancellationToken ct) =>
         {
             var familyId = httpContext.User.GetFamilyId();
@@ -134,6 +149,13 @@ public class ShoppingListsModule : ICarterModule
             db.ShoppingLists.Remove(list);
             await db.SaveChangesAsync(ct);
 
+            // Real-time: notify family of list deletion
+            _ = shoppingHub.NotifyShoppingGroup(familyId.Value.ToString(), HubMethods.ShoppingListDeleted, new
+            {
+                list.Id,
+                list.Name
+            });
+
             return Results.NoContent();
         })
         .WithDescription("Delete a shopping list and all its items.");
@@ -145,6 +167,7 @@ public class ShoppingListsModule : ICarterModule
             Guid listId,
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<ShoppingHub> shoppingHub,
             CancellationToken ct) =>
         {
             var request = await httpContext.Request.ReadFromJsonAsync<AddItemRequest>(ct);
@@ -177,6 +200,19 @@ public class ShoppingListsModule : ICarterModule
             list.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
 
+            // Real-time: notify family of new item
+            _ = shoppingHub.NotifyShoppingGroup(familyId.Value.ToString(), HubMethods.ShoppingItemAdded, new
+            {
+                item.Id,
+                ListId = listId,
+                item.Name,
+                item.Category,
+                item.Quantity,
+                item.Unit,
+                item.IsChecked,
+                item.SortOrder
+            });
+
             return Results.Created($"/api/shopping/{listId}/items/{item.Id}", new
             {
                 item.Id,
@@ -195,6 +231,7 @@ public class ShoppingListsModule : ICarterModule
             Guid itemId,
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<ShoppingHub> shoppingHub,
             CancellationToken ct) =>
         {
             var userId = httpContext.User.GetUserId();
@@ -216,6 +253,16 @@ public class ShoppingListsModule : ICarterModule
 
             await db.SaveChangesAsync(ct);
 
+            // Real-time: notify family of item toggle
+            _ = shoppingHub.NotifyShoppingGroup(familyId.Value.ToString(), HubMethods.ShoppingItemToggled, new
+            {
+                item.Id,
+                ListId = listId,
+                item.IsChecked,
+                item.CheckedByUserId,
+                item.CheckedAt
+            });
+
             return Results.Ok(new
             {
                 item.Id,
@@ -232,6 +279,7 @@ public class ShoppingListsModule : ICarterModule
             Guid itemId,
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<ShoppingHub> shoppingHub,
             CancellationToken ct) =>
         {
             var request = await httpContext.Request.ReadFromJsonAsync<UpdateItemRequest>(ct);
@@ -256,6 +304,17 @@ public class ShoppingListsModule : ICarterModule
 
             await db.SaveChangesAsync(ct);
 
+            // Real-time: notify family of item update
+            _ = shoppingHub.NotifyShoppingGroup(familyId.Value.ToString(), HubMethods.ShoppingItemUpdated, new
+            {
+                item.Id,
+                ListId = listId,
+                item.Name,
+                item.Category,
+                item.Quantity,
+                item.Unit
+            });
+
             return Results.Ok(new { item.Id, item.Name, item.Quantity });
         })
         .Accepts<UpdateItemRequest>("application/json")
@@ -267,6 +326,7 @@ public class ShoppingListsModule : ICarterModule
             Guid itemId,
             HttpContext httpContext,
             VillageDbContext db,
+            IHubContext<ShoppingHub> shoppingHub,
             CancellationToken ct) =>
         {
             var familyId = httpContext.User.GetFamilyId();
@@ -284,6 +344,15 @@ public class ShoppingListsModule : ICarterModule
             if (list != null) list.UpdatedAt = DateTime.UtcNow;
 
             await db.SaveChangesAsync(ct);
+
+            // Real-time: notify family of item deletion
+            _ = shoppingHub.NotifyShoppingGroup(familyId.Value.ToString(), HubMethods.ShoppingItemDeleted, new
+            {
+                item.Id,
+                ListId = listId,
+                item.Name
+            });
+
             return Results.NoContent();
         })
         .WithDescription("Remove an item from a shopping list.");
