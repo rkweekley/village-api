@@ -10,7 +10,7 @@ public interface IEmailService
     Task SendNewSignupAlertAsync(string email, string displayName, string familyName);
     Task SendSubscriptionCancelScheduledAsync(string email, string displayName, DateTime endDate);
     Task SendSubscriptionCanceledAlertAsync(string email, string displayName, string familyName, DateTime endDate);
-    Task SendContactFormAsync(string name, string email, string subject, string message);
+    Task SendContactFormAsync(string name, string email, string subject, string message, string source = "");
 }
 
 public class MailgunEmailService : IEmailService
@@ -137,7 +137,7 @@ public class MailgunEmailService : IEmailService
             $"Canceled: {displayName} — {familyName} (ends {endDateStr})", html);
     }
 
-    public async Task SendContactFormAsync(string name, string email, string subject, string message)
+    public async Task SendContactFormAsync(string name, string email, string subject, string message, string source = "")
     {
         if (!IsConfigured)
         {
@@ -145,27 +145,39 @@ public class MailgunEmailService : IEmailService
             return;
         }
 
+        // Brand the email by the site the form was submitted from (Origin header).
+        var isCyberal = source.Contains("cyberalsolutions.com", StringComparison.OrdinalIgnoreCase);
+        var fromAddress = isCyberal
+            ? $"Cyberal Solutions <noreply@{_domain}>"
+            : $"Village <noreply@{_domain}>";
+        var footer = isCyberal
+            ? "&mdash; Sent via cyberalsolutions.com"
+            : "&mdash; Village Contact Form";
+
         var html = $"<h3>New Contact Form Submission</h3>" +
                    $"<p><strong>Name:</strong> {System.Net.WebUtility.HtmlEncode(name)}</p>" +
                    $"<p><strong>Email:</strong> {System.Net.WebUtility.HtmlEncode(email)}</p>" +
                    $"<p><strong>Subject:</strong> {System.Net.WebUtility.HtmlEncode(subject)}</p>" +
                    $"<p><strong>Message:</strong></p>" +
-                   $"<p>{System.Net.WebUtility.HtmlEncode(message)}</p>" +
-                   $"<p><em>— Village Contact Form</em></p>";
+                   $"<p>{System.Net.WebUtility.HtmlEncode(message).Replace("\n", "<br>")}</p>" +
+                   $"<p><em>{footer}</em></p>";
 
-        await SendEmailAsync("info@cyberalsolutions.com", $"Contact: {subject}", html);
+        await SendEmailAsync("info@cyberalsolutions.com", $"Contact: {subject}", html, replyTo: email, fromOverride: fromAddress);
     }
 
-    private async Task SendEmailAsync(string to, string subject, string html)
+    private async Task SendEmailAsync(string to, string subject, string html, string? replyTo = null, string? fromOverride = null)
     {
-        var fromAddress = $"Village <noreply@{_domain}>";
-        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        var fromAddress = fromOverride ?? $"Village <noreply@{_domain}>";
+        var fields = new Dictionary<string, string>
         {
             ["from"] = fromAddress,
             ["to"] = to,
             ["subject"] = subject,
             ["html"] = html
-        });
+        };
+        if (!string.IsNullOrEmpty(replyTo))
+            fields["h:Reply-To"] = replyTo;
+        var content = new FormUrlEncodedContent(fields);
 
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Basic", Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($"api:{_apiKey}")));

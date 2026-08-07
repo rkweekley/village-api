@@ -321,6 +321,7 @@ public class AuthModule : ICarterModule
                 return Results.BadRequest(new { error = "Message is required (max 5000 chars)" });
 
             var emailService = httpContext.RequestServices.GetRequiredService<IEmailService>();
+            var origin = httpContext.Request.Headers["Origin"].FirstOrDefault() ?? "";
 
             try
             {
@@ -328,7 +329,8 @@ public class AuthModule : ICarterModule
                     request.Name.Trim(),
                     request.Email.Trim(),
                     request.Subject.Trim(),
-                    request.Message.Trim());
+                    request.Message.Trim(),
+                    origin);
             }
             catch (Exception)
             {
