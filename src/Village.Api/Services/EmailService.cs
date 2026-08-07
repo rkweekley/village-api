@@ -10,6 +10,7 @@ public interface IEmailService
     Task SendNewSignupAlertAsync(string email, string displayName, string familyName);
     Task SendSubscriptionCancelScheduledAsync(string email, string displayName, DateTime endDate);
     Task SendSubscriptionCanceledAlertAsync(string email, string displayName, string familyName, DateTime endDate);
+    Task SendContactFormAsync(string name, string email, string subject, string message);
 }
 
 public class MailgunEmailService : IEmailService
@@ -42,7 +43,7 @@ public class MailgunEmailService : IEmailService
             return;
         }
 
-        var resetUrl = $"https://villagefamily.app/reset-password?token={Uri.EscapeDataString(resetToken)}&email={Uri.EscapeDataString(email)}";
+        var resetUrl = $"https://my.villagefamily.app/reset-password?token={Uri.EscapeDataString(resetToken)}&email={Uri.EscapeDataString(email)}";
         var html = $"<h2>Reset your Village password</h2><p>Hi {displayName},</p><p>Someone requested a password reset. Click below to reset:</p><p><a href=\"{resetUrl}\">Reset Password</a></p><p>This link expires in 1 hour. If you didn't request this, ignore this email.</p>";
         await SendEmailAsync(email, "Reset your Village password", html);
     }
@@ -55,7 +56,7 @@ public class MailgunEmailService : IEmailService
             return;
         }
 
-        var joinUrl = $"https://villagefamily.app/join?code={inviteCode}";
+        var joinUrl = $"https://my.villagefamily.app/join?code={inviteCode}";
         var html = $"<h2>Join {familyName} on Village</h2><p>You've been invited to join a family on Village — the family productivity app. Click below to accept:</p><p><a href=\"{joinUrl}\">Join {familyName}</a></p><p>Your invite code: <strong>{inviteCode}</strong></p>";
         await SendEmailAsync(email, $"Join {familyName} on Village", html);
     }
@@ -134,6 +135,25 @@ public class MailgunEmailService : IEmailService
                    "<p><em>— Village Bot</em></p>";
         await SendEmailAsync("info@cyberalsolutions.com",
             $"Canceled: {displayName} — {familyName} (ends {endDateStr})", html);
+    }
+
+    public async Task SendContactFormAsync(string name, string email, string subject, string message)
+    {
+        if (!IsConfigured)
+        {
+            _logger.LogWarning("Cannot send contact form — Mailgun not configured");
+            return;
+        }
+
+        var html = $"<h3>New Contact Form Submission</h3>" +
+                   $"<p><strong>Name:</strong> {System.Net.WebUtility.HtmlEncode(name)}</p>" +
+                   $"<p><strong>Email:</strong> {System.Net.WebUtility.HtmlEncode(email)}</p>" +
+                   $"<p><strong>Subject:</strong> {System.Net.WebUtility.HtmlEncode(subject)}</p>" +
+                   $"<p><strong>Message:</strong></p>" +
+                   $"<p>{System.Net.WebUtility.HtmlEncode(message)}</p>" +
+                   $"<p><em>— Village Contact Form</em></p>";
+
+        await SendEmailAsync("info@cyberalsolutions.com", $"Contact: {subject}", html);
     }
 
     private async Task SendEmailAsync(string to, string subject, string html)
