@@ -68,19 +68,45 @@ public class RecipesModule : ICarterModule
 
     /// <summary>
     /// Clean TheMealDB instructions: decode HTML entities, normalize line endings,
-    /// and add paragraph spacing between steps so they render as readable blocks.
+    /// strip step numbering, and flow into readable paragraphs.
     /// </summary>
     private static string CleanInstructions(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return raw;
+
         // Decode HTML entities like &amp; &rsquo; &frac12;
         var decoded = WebUtility.HtmlDecode(raw);
-        // Normalize \r\n → \n
-        var normalized = decoded.Replace("\r\n", "\n").Replace("\r", "\n");
+
+        // Split into lines
+        var output = new List<string>();
+        foreach (var line in decoded.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+            {
+                // Blank line → paragraph break
+                output.Add("");
+                continue;
+            }
+
+            // Strip leading step labels: "STEP 1", "Step 1.", "1.", "1)", "1 —", etc.
+            trimmed = System.Text.RegularExpressions.Regex.Replace(
+                trimmed,
+                @"^(?:STEP\s*\d+[\.\):\-\s]*|Step\s*\d+[\.\):\-\s]*|\d+[\.\)]\s*|\d+\s*[-–—]\s*)",
+                "",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            trimmed = trimmed.Trim();
+            if (!string.IsNullOrEmpty(trimmed))
+                output.Add(trimmed);
+        }
+
         // Collapse 3+ blank lines into 2
-        while (normalized.Contains("\n\n\n"))
-            normalized = normalized.Replace("\n\n\n", "\n\n");
-        return normalized.Trim();
+        var result = string.Join("\n", output);
+        while (result.Contains("\n\n\n"))
+            result = result.Replace("\n\n\n", "\n\n");
+
+        return result.Trim();
     }
 
     /// <summary>Convert TheMealDB's 20 numbered ingredient fields into a clean list.</summary>
