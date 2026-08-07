@@ -56,7 +56,7 @@ public class MailgunEmailService : IEmailService
             return;
         }
 
-        var joinUrl = $"https://my.villagefamily.app/#/join?code={inviteCode}";
+        var joinUrl = $"https://my.villagefamily.app/#/register?code={inviteCode}";
         var html = $"<h2>Join {familyName} on Village</h2><p>You've been invited to join a family on Village — the family productivity app. Click below to accept:</p><p><a href=\"{joinUrl}\">Join {familyName}</a></p><p>Your invite code: <strong>{inviteCode}</strong></p>";
         await SendEmailAsync(email, $"Join {familyName} on Village", html);
     }

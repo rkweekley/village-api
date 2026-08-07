@@ -301,6 +301,45 @@ public class AuthModule : ICarterModule
         })
         .RequireAuthorization()
         .WithDescription("Get the current user's profile.");
+
+        // ── Contact ────────────────────────────────────────────────
+        group.MapPost("/contact", async (
+            HttpContext httpContext,
+            CancellationToken ct) =>
+        {
+            var request = await httpContext.Request.ReadFromJsonAsync<ContactRequest>(ct);
+            if (request == null)
+                return Results.BadRequest(new { error = "Invalid request body" });
+
+            if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length > 200)
+                return Results.BadRequest(new { error = "Name is required (max 200 chars)" });
+            if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@') || request.Email.Length > 200)
+                return Results.BadRequest(new { error = "Valid email is required" });
+            if (string.IsNullOrWhiteSpace(request.Subject) || request.Subject.Length > 200)
+                return Results.BadRequest(new { error = "Subject is required (max 200 chars)" });
+            if (string.IsNullOrWhiteSpace(request.Message) || request.Message.Length > 5000)
+                return Results.BadRequest(new { error = "Message is required (max 5000 chars)" });
+
+            var emailService = httpContext.RequestServices.GetRequiredService<IEmailService>();
+
+            try
+            {
+                await emailService.SendContactFormAsync(
+                    request.Name.Trim(),
+                    request.Email.Trim(),
+                    request.Subject.Trim(),
+                    request.Message.Trim());
+            }
+            catch (Exception)
+            {
+                // Don't expose Mailgun errors; still return success
+            }
+
+            return Results.Ok(new { message = "Message sent! We'll get back to you soon." });
+        })
+        .AllowAnonymous()
+        .RequireRateLimiting("Auth")
+        .WithDescription("Submit a contact form message.");
     }
 
     private static string GenerateInviteCode()

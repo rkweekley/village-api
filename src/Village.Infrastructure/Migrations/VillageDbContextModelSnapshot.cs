@@ -295,6 +295,12 @@ namespace Village.Infrastructure.Migrations
                     b.Property<string>("StripeSubscriptionId")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("SubscriptionCanceledAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("SubscriptionCanceledByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("SubscriptionExpiresAt")
                         .HasColumnType("timestamp without time zone");
 
