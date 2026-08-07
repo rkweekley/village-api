@@ -66,6 +66,23 @@ public class RecipesModule : ICarterModule
         });
     }
 
+    /// <summary>
+    /// Clean TheMealDB instructions: decode HTML entities, normalize line endings,
+    /// and add paragraph spacing between steps so they render as readable blocks.
+    /// </summary>
+    private static string CleanInstructions(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return raw;
+        // Decode HTML entities like &amp; &rsquo; &frac12;
+        var decoded = WebUtility.HtmlDecode(raw);
+        // Normalize \r\n → \n
+        var normalized = decoded.Replace("\r\n", "\n").Replace("\r", "\n");
+        // Collapse 3+ blank lines into 2
+        while (normalized.Contains("\n\n\n"))
+            normalized = normalized.Replace("\n\n\n", "\n\n");
+        return normalized.Trim();
+    }
+
     /// <summary>Convert TheMealDB's 20 numbered ingredient fields into a clean list.</summary>
     private static List<IngredientDto> ExtractIngredients(MealDbMealDetail meal)
     {
@@ -107,7 +124,7 @@ public class RecipesModule : ICarterModule
         Image: meal.StrMealThumb,
         Category: meal.StrCategory,
         Area: meal.StrArea,
-        Instructions: WebUtility.HtmlDecode(meal.StrInstructions),
+        Instructions: CleanInstructions(meal.StrInstructions),
         YoutubeUrl: meal.StrYoutube,
         Ingredients: ExtractIngredients(meal));
 }
