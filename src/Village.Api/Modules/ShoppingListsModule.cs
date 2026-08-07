@@ -225,6 +225,71 @@ public class ShoppingListsModule : ICarterModule
         .Accepts<AddItemRequest>("application/json")
         .WithDescription("Add an item to a shopping list.");
 
+        // POST /api/shopping/{listId}/items/bulk — add ingredients from a recipe
+        group.MapPost("/{listId:guid}/items/bulk", async (
+            Guid listId,
+            HttpContext httpContext,
+            VillageDbContext db,
+            IHubContext<ShoppingHub> shoppingHub,
+            CancellationToken ct) =>
+        {
+            var request = await httpContext.Request
+                .ReadFromJsonAsync<BulkAddItemsRequest>(ct);
+            if (request?.Ingredients == null || request.Ingredients.Count == 0)
+                return Results.BadRequest(new { error = "At least one ingredient is required" });
+
+            var familyId = httpContext.User.GetFamilyId();
+            if (familyId == null) return Results.Unauthorized();
+
+            var list = await db.ShoppingLists
+                .FirstOrDefaultAsync(s => s.Id == listId && s.FamilyId == familyId.Value, ct);
+            if (list == null) return Results.NotFound();
+
+            var maxSort = await db.ShoppingListItems
+                .Where(i => i.ShoppingListId == listId)
+                .MaxAsync(i => (int?)i.SortOrder, ct) ?? 0;
+
+            var added = new List<ShoppingListItem>();
+            foreach (var ing in request.Ingredients)
+            {
+                if (string.IsNullOrWhiteSpace(ing.Name)) continue;
+                var item = new ShoppingListItem
+                {
+                    Id = Guid.NewGuid(),
+                    ShoppingListId = listId,
+                    Name = ing.Name.Trim(),
+                    Category = ing.Category?.Trim(),
+                    Quantity = 1,
+                    Unit = ing.Measure?.Trim(),
+                    SortOrder = ++maxSort,
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.ShoppingListItems.Add(item);
+                added.Add(item);
+            }
+
+            list.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            // Real-time: notify family of all new items
+            _ = shoppingHub.NotifyShoppingGroup(familyId.Value.ToString(),
+                HubMethods.ShoppingItemAdded, added.Select(item => new
+                {
+                    item.Id,
+                    ListId = listId,
+                    item.Name,
+                    item.Category,
+                    item.Quantity,
+                    item.Unit,
+                    item.IsChecked,
+                    item.SortOrder
+                }));
+
+            return Results.Ok(new { added = added.Count });
+        })
+        .Accepts<BulkAddItemsRequest>("application/json")
+        .WithDescription("Bulk-add ingredients to a shopping list (from a recipe).");
+
         // PUT /api/shopping/{listId}/items/{itemId}/toggle — check/uncheck an item
         group.MapPut("/{listId:guid}/items/{itemId:guid}/toggle", async (
             Guid listId,
@@ -377,4 +442,14 @@ public record UpdateItemRequest(
     string? Category,
     int? Quantity,
     string? Unit
+);
+
+public record BulkAddItemsRequest(
+    List<BulkIngredientDto> Ingredients
+);
+
+public record BulkIngredientDto(
+    string Name,
+    string? Measure,
+    string? Category
 );

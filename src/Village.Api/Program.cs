@@ -43,6 +43,9 @@ builder.Services.AddHttpClient<IEmailService, MailgunEmailService>();
 Stripe.StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY")
     ?? builder.Configuration["Stripe:SecretKey"];
 
+// Recipe ideas — TheMealDB proxy (free, no API key)
+builder.Services.AddHttpClient<MealDbService>();
+
 // Carter modules
 builder.Services.AddCarter();
 
