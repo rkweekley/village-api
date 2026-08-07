@@ -1,6 +1,7 @@
 using Carter;
 using Microsoft.EntityFrameworkCore;
 using Village.Api.Extensions;
+using Village.Api.Services;
 using Village.Domain.Entities;
 using Village.Infrastructure.Data;
 
@@ -104,6 +105,45 @@ public class FamilyModule : ICarterModule
         .AllowAnonymous()
         .WithDescription("Look up a family by invite code (used during registration).");
 
+        // POST /api/families/mine/invite — send invite email
+        group.MapPost("/mine/invite", async (
+            HttpContext httpContext,
+            VillageDbContext db,
+            IEmailService emailService,
+            CancellationToken ct) =>
+        {
+            var request = await httpContext.Request.ReadFromJsonAsync<SendInviteRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
+            var familyId = httpContext.User.GetFamilyId();
+            var role = httpContext.User.GetRole();
+            if (familyId == null) return Results.Unauthorized();
+            if (role != "Parent" && role != "Caregiver")
+                return Results.Forbid();
+
+            if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@'))
+                return Results.BadRequest(new { error = "A valid email address is required." });
+
+            var family = await db.Families.FindAsync(new object[] { familyId.Value }, ct);
+            if (family == null) return Results.NotFound();
+
+            // Fire-and-forget: email failure shouldn't block the response
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await emailService.SendInviteEmailAsync(request.Email.Trim(), family.Name, family.InviteCode);
+                }
+                catch (Exception ex)
+                {
+                    // Logged inside MailgunEmailService already
+                }
+            });
+
+            return Results.Ok(new { message = $"Invite sent to {request.Email.Trim()}" });
+        })
+        .WithDescription("Send an invite email to join this family (Parent/Caregiver only).");
+
         // PUT /api/families/mine/members/{userId}/role — change member role
         group.MapPut("/mine/members/{userId:guid}/role", async (
             Guid userId,
@@ -182,4 +222,8 @@ public record UpdateFamilyRequest(
 
 public record ChangeRoleRequest(
     string Role
+);
+
+public record SendInviteRequest(
+    string Email
 );
