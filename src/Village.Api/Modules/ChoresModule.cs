@@ -309,6 +309,7 @@ public class ChoresModule : ICarterModule
             if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var userId = httpContext.User.GetUserId();
             var familyId = httpContext.User.GetFamilyId();
+            var role = httpContext.User.GetRole();
             if (userId == null) return Results.Unauthorized();
             if (familyId == null) return Results.Unauthorized();
 
@@ -318,8 +319,11 @@ public class ChoresModule : ICarterModule
                 .FirstOrDefaultAsync(a => a.Id == assignmentId && a.Chore.FamilyId == familyId.Value, ct);
             if (assignment == null) return Results.NotFound();
 
-            if (assignment.AssignedToId != userId.Value)
-                return Results.Forbid();
+            // Parents and caregivers can complete chores for any family member.
+            // Children can only complete their own chores.
+            var canManage = role == "Parent" || role == "Caregiver";
+            if (assignment.AssignedToId != userId.Value && !canManage)
+                return Results.BadRequest(new { error = "You can only complete chores assigned to you." });
 
             if (assignment.Status != ChoreStatus.Pending)
                 return Results.Conflict(new { error = "Assignment is not in pending state" });
@@ -347,20 +351,22 @@ public class ChoresModule : ICarterModule
             assignment.Status = ChoreStatus.Completed;
             assignment.CompletedAt = DateTime.UtcNow;
 
-            // Award points
-            var user = await db.Users.FindAsync(new object[] { userId.Value }, ct);
-            if (user != null)
+            // Award points to the assigned person, not the completer.
+            // Parents/caregivers can complete on a child's behalf, but points
+            // always go to the person the chore was assigned to.
+            var assignedUser = await db.Users.FindAsync(new object[] { assignment.AssignedToId }, ct);
+            if (assignedUser != null)
             {
-                var previousBalance = user.PointsBalance;
-                user.PointsBalance += assignment.Chore.PointValue;
+                var previousBalance = assignedUser.PointsBalance;
+                assignedUser.PointsBalance += assignment.Chore.PointValue;
 
                 db.PointsTransactions.Add(new PointsTransaction
                 {
                     Id = Guid.NewGuid(),
-                    FamilyId = user.FamilyId,
-                    UserId = userId.Value,
+                    FamilyId = assignedUser.FamilyId,
+                    UserId = assignment.AssignedToId,
                     Amount = assignment.Chore.PointValue,
-                    BalanceAfter = user.PointsBalance,
+                    BalanceAfter = assignedUser.PointsBalance,
                     Type = TransactionType.ChoreEarned,
                     ReferenceId = completion.Id.ToString(),
                     Note = $"Completed: {assignment.Chore.Name}",
@@ -368,12 +374,12 @@ public class ChoresModule : ICarterModule
                 });
 
                 // Real-time: points updated
-                _ = pointsHub.NotifyPointsGroup(user.FamilyId.ToString(), HubMethods.PointsUpdated, new
+                _ = pointsHub.NotifyPointsGroup(assignedUser.FamilyId.ToString(), HubMethods.PointsUpdated, new
                 {
-                    userId = userId.Value,
+                    userId = assignment.AssignedToId,
                     displayName = assignment.AssignedTo.DisplayName,
                     pointsAwarded = assignment.Chore.PointValue,
-                    newBalance = user.PointsBalance,
+                    newBalance = assignedUser.PointsBalance,
                     reason = $"Completed: {assignment.Chore.Name}"
                 });
             }
