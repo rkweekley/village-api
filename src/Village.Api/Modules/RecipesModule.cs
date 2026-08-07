@@ -1,3 +1,4 @@
+using System.Net;
 using Carter;
 using Village.Api.Services;
 
@@ -106,7 +107,7 @@ public class RecipesModule : ICarterModule
         Image: meal.StrMealThumb,
         Category: meal.StrCategory,
         Area: meal.StrArea,
-        Instructions: meal.StrInstructions,
+        Instructions: WebUtility.HtmlDecode(meal.StrInstructions),
         YoutubeUrl: meal.StrYoutube,
         Ingredients: ExtractIngredients(meal));
 }
