@@ -321,7 +321,7 @@ public class ChoresModule : ICarterModule
 
             // Parents and caregivers can complete chores for any family member.
             // Children can only complete their own chores.
-            var canManage = role == "Parent" || role == "Caregiver";
+            var canManage = CanManageChildren(role);
             if (assignment.AssignedToId != userId.Value && !canManage)
                 return Results.BadRequest(new { error = "You can only complete chores assigned to you." });
 
@@ -421,7 +421,7 @@ public class ChoresModule : ICarterModule
             var userId = httpContext.User.GetUserId();
             var role = httpContext.User.GetRole();
             if (userId == null) return Results.Unauthorized();
-            if (role != "Parent") return Results.Forbid();
+            if (!CanManageChildren(role)) return Results.Forbid();
 
             var completion = await db.ChoreCompletions
                 .Include(c => c.Assignment)
@@ -502,6 +502,10 @@ public class ChoresModule : ICarterModule
         .Accepts<ApproveCompletionRequest>("application/json")
         .WithDescription("Parent approves or rejects a chore completion.");
     }
+
+    /// <summary>True if the role can manage children (approve, complete, assign).</summary>
+    private static bool CanManageChildren(string? role) =>
+        role == "Parent" || role == "Caregiver";
 }
 
 // ── Request DTOs ──
