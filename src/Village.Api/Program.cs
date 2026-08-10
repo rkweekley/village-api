@@ -6,7 +6,9 @@ using Scalar.AspNetCore;
 using StackExchange.Redis;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Net;
 using System.Threading.RateLimiting;
 using Village.Api.Extensions;
 using Village.Api.Hubs;
@@ -147,7 +149,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 
     // Always trust the Docker bridge network
-    options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+    options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
 
     // Allow override via env var: FORWARDED_ALLOWED_NETWORKS=10.0.0.0/8,172.16.0.0/12
     var allowed = Environment.GetEnvironmentVariable("FORWARDED_ALLOWED_NETWORKS");
@@ -156,8 +158,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
         foreach (var cidr in allowed.Split(','))
         {
             var trimmed = cidr.Trim();
-            if (IPNetwork.TryParse(trimmed, out var network))
-                options.KnownNetworks.Add(network);
+            if (System.Net.IPNetwork.TryParse(trimmed, out var network))
+                options.KnownIPNetworks.Add(network);
         }
     }
 });
