@@ -347,6 +347,7 @@ public class ChoresModule : ICarterModule
                 completion.ApprovedAt = DateTime.UtcNow;
             }
 
+            db.ChoreCompletions.Add(completion);
             assignment.Completion = completion;
             assignment.Status = ChoreStatus.Completed;
             assignment.CompletedAt = DateTime.UtcNow;
