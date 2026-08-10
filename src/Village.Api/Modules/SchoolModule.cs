@@ -251,6 +251,71 @@ public class SchoolModule : ICarterModule
         .Accepts<UpdateSchoolWorkRequest>("application/json")
         .WithDescription("Submit or grade a school work item.");
 
+        // PUT /api/school/{id}/edit — edit pending school work (parent only)
+        group.MapPut("/{id:guid}/edit", async (
+            Guid id,
+            HttpContext httpContext,
+            VillageDbContext db,
+            CancellationToken ct) =>
+        {
+            var request = await httpContext.Request.ReadFromJsonAsync<EditSchoolWorkRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
+            var userId = httpContext.User.GetUserId();
+            var role = httpContext.User.GetRole();
+            if (userId == null) return Results.Unauthorized();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
+
+            var familyId = httpContext.User.GetFamilyId();
+            if (familyId == null) return Results.Unauthorized();
+
+            var work = await db.SchoolWorks
+                .FirstOrDefaultAsync(w => w.Id == id && w.FamilyId == familyId.Value, ct);
+            if (work == null) return Results.NotFound();
+
+            if (work.Status != SchoolWorkStatus.Pending)
+                return Results.Conflict(new { error = "Only pending assignments can be edited." });
+
+            // Validate subject if changing
+            if (request.SubjectId.HasValue)
+            {
+                var subject = await db.SchoolSubjects
+                    .FirstOrDefaultAsync(s => s.Id == request.SubjectId.Value && s.FamilyId == familyId.Value, ct);
+                if (subject == null) return Results.NotFound(new { error = "Subject not found." });
+                work.SubjectId = request.SubjectId.Value;
+            }
+
+            // Validate assignee if changing
+            if (request.AssignedToId.HasValue)
+            {
+                var inFamily = await db.Users.AnyAsync(
+                    u => u.Id == request.AssignedToId.Value && u.FamilyId == familyId.Value, ct);
+                if (!inFamily) return Results.BadRequest(new { error = "Assignee is not in your family." });
+                work.AssignedToId = request.AssignedToId.Value;
+            }
+
+            if (request.Title != null) work.Title = request.Title.Trim();
+            if (request.Description != null) work.Description = request.Description?.Trim();
+            if (request.DueDate.HasValue) work.DueDate = request.DueDate.Value;
+            if (request.PointsPossible.HasValue) work.PointsPossible = request.PointsPossible.Value;
+
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new
+            {
+                work.Id,
+                work.Title,
+                work.Description,
+                SubjectId = work.SubjectId,
+                AssignedToId = work.AssignedToId,
+                DueDate = work.DueDate.ToString(),
+                work.PointsPossible,
+                Status = work.Status.ToString()
+            });
+        })
+        .Accepts<EditSchoolWorkRequest>("application/json")
+        .WithDescription("Edit a pending school work assignment (parent only).");
+
         // GET /api/school/pending-grading — items submitted but not graded (parent view)
         group.MapGet("/pending-grading", async (
             HttpContext httpContext,
@@ -316,4 +381,13 @@ public record UpdateSchoolWorkRequest(
     string Status,
     string? SubmissionNote,
     int? PointsEarned
+);
+
+public record EditSchoolWorkRequest(
+    string? Title,
+    string? Description,
+    DateOnly? DueDate,
+    int? PointsPossible,
+    Guid? SubjectId,
+    Guid? AssignedToId
 );
