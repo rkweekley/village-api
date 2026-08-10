@@ -208,7 +208,7 @@ public class ChoresModule : ICarterModule
             var assignments = await db.ChoreAssignments
                 .Include(a => a.Chore)
                 .Include(a => a.AssignedTo)
-                .Include(a => a.Completion)
+                .Include(a => a.Completion)!.ThenInclude(c => c!.CompletedBy)
                 .Where(a => a.Chore.FamilyId == familyId.Value && a.DueDate >= today.AddDays(-7))
                 .OrderBy(a => a.DueDate)
                 .ThenBy(a => a.Chore.Name)
@@ -231,6 +231,7 @@ public class ChoresModule : ICarterModule
                         ApprovalStatus = a.Completion.ApprovalStatus.ToString(),
                         a.Completion.PointsAwarded,
                         CompletedById = a.Completion.CompletedById,
+                        CompletedByName = a.Completion.CompletedBy.DisplayName,
                         ApprovedById = a.Completion.ApprovedById,
                         a.Completion.CreatedAt,
                         a.Completion.ApprovedAt
