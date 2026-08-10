@@ -7,6 +7,36 @@ public class VillageDbContext : DbContext
 {
     public VillageDbContext(DbContextOptions<VillageDbContext> options) : base(options) { }
 
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        AutoStampUpdatedAt();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    public override int SaveChanges()
+    {
+        AutoStampUpdatedAt();
+        return base.SaveChanges();
+    }
+
+    /// <summary>
+    /// Auto-set UpdatedAt on any modified entity that has the property.
+    /// </summary>
+    private void AutoStampUpdatedAt()
+    {
+        var entries = ChangeTracker.Entries()
+            .Where(e => e.State == EntityState.Modified);
+        foreach (var entry in entries)
+        {
+            var prop = entry.Properties.FirstOrDefault(
+                p => p.Metadata.Name == "UpdatedAt");
+            if (prop != null)
+            {
+                prop.CurrentValue = DateTime.UtcNow;
+            }
+        }
+    }
+
     public DbSet<Family> Families => Set<Family>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Chore> Chores => Set<Chore>();

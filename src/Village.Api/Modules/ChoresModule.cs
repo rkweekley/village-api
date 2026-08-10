@@ -255,6 +255,8 @@ public class ChoresModule : ICarterModule
             if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
             var assigneeInFamily = await db.Users.AnyAsync(u => u.Id == request.AssignedToId && u.FamilyId == familyId.Value, ct);
             if (!assigneeInFamily) return Results.BadRequest(new { error = "Assignee is not in your family." });
 
@@ -430,17 +432,19 @@ public class ChoresModule : ICarterModule
             if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
             var userId = httpContext.User.GetUserId();
             var role = httpContext.User.GetRole();
-            if (userId == null) return Results.Unauthorized();
+            var callerFamilyId = httpContext.User.GetFamilyId();
+            if (userId == null || callerFamilyId == null) return Results.Unauthorized();
             if (!CanManageChildren(role)) return Results.Forbid();
 
             var completion = await db.ChoreCompletions
                 .Include(c => c.Assignment)
                     .ThenInclude(a => a.Chore)
                 .Include(c => c.Assignment.AssignedTo)
-                .FirstOrDefaultAsync(c => c.Id == completionId, ct);
+                .FirstOrDefaultAsync(c => c.Id == completionId
+                    && c.Assignment.Chore.FamilyId == callerFamilyId.Value, ct);
             if (completion == null) return Results.NotFound();
 
-            var familyId = completion.Assignment.Chore.FamilyId;
+            var familyId = callerFamilyId.Value;
 
             completion.ApprovedById = userId.Value;
             completion.ApprovedAt = DateTime.UtcNow;

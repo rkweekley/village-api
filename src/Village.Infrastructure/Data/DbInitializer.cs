@@ -4,15 +4,29 @@ using Village.Domain.Entities;
 namespace Village.Infrastructure.Data;
 
 /// <summary>
-/// Seeds initial data for development environments.
+/// Seeds initial data for development environments only.
+/// Requires SEED_ENABLED=true env var; reads passwords from SEED_PARENT_PASSWORD
+/// and SEED_CHILD_PASSWORD env vars. Hardcoded passwords are never used.
 /// </summary>
 public static class DbInitializer
 {
     public static async Task SeedAsync(VillageDbContext db)
     {
+        // Only seed in development with explicit opt-in
+        if (Environment.GetEnvironmentVariable("SEED_ENABLED") != "true")
+            return;
+
         // Only seed if no users exist
         if (await db.Users.AnyAsync())
             return;
+
+        var parentPassword = Environment.GetEnvironmentVariable("SEED_PARENT_PASSWORD");
+        var childPassword = Environment.GetEnvironmentVariable("SEED_CHILD_PASSWORD");
+        if (string.IsNullOrEmpty(parentPassword) || string.IsNullOrEmpty(childPassword))
+        {
+            // Log warning but don't seed with hardcoded defaults
+            return;
+        }
 
         // ── Dev family ──
         var family = new Family
@@ -33,7 +47,7 @@ public static class DbInitializer
             Email = "parent@village.app",
             DisplayName = "Mom",
             Role = UserRole.Parent,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Parent123!"),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(parentPassword),
             PointsBalance = 500,
         };
         db.Users.Add(parentUser);
@@ -45,7 +59,7 @@ public static class DbInitializer
             Email = "dad@village.app",
             DisplayName = "Dad",
             Role = UserRole.Parent,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Parent123!"),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(parentPassword),
             PointsBalance = 500,
         };
         db.Users.Add(dadUser);
@@ -58,7 +72,7 @@ public static class DbInitializer
             Email = "alice@village.app",
             DisplayName = "Alice",
             Role = UserRole.Child,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Child123!"),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(childPassword),
             PointsBalance = 120,
             BirthDate = new DateOnly(2014, 5, 12),
         };
@@ -71,7 +85,7 @@ public static class DbInitializer
             Email = "bobby@village.app",
             DisplayName = "Bobby",
             Role = UserRole.Child,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Child123!"),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(childPassword),
             PointsBalance = 85,
             BirthDate = new DateOnly(2017, 8, 3),
         };

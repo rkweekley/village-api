@@ -145,6 +145,8 @@ public class SchoolModule : ICarterModule
 
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
 
             // Verify subject belongs to family
             var subject = await db.SchoolSubjects

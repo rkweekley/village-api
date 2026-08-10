@@ -108,6 +108,8 @@ public class MealsModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             var userId = httpContext.User.GetUserId();
             if (familyId == null || userId == null) return Results.Unauthorized();
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
 
             var recipe = new Recipe
             {
@@ -354,6 +356,8 @@ public class MealsModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             var userId = httpContext.User.GetUserId();
             if (familyId == null || userId == null) return Results.Unauthorized();
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
 
             if (!DateOnly.TryParse(request.WeekStart, out var weekStart))
                 return Results.BadRequest(new { error = "Invalid weekStart date. Use yyyy-MM-dd format." });

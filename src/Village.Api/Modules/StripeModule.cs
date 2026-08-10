@@ -90,6 +90,8 @@ public class StripeModule : ICarterModule
 
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+            var role = httpContext.User.GetRole();
+            if (role != "Parent") return Results.Forbid();
 
             var family = await db.Families.FindAsync(new object[] { familyId.Value }, ct);
             if (family == null) return Results.NotFound();
@@ -150,6 +152,8 @@ public class StripeModule : ICarterModule
         {
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
+            var role = httpContext.User.GetRole();
+            if (role != "Parent") return Results.Forbid();
 
             var family = await db.Families.FindAsync(new object[] { familyId.Value }, ct);
             if (family == null || string.IsNullOrEmpty(family.StripeCustomerId))
@@ -180,7 +184,9 @@ public class StripeModule : ICarterModule
         {
             var familyId = httpContext.User.GetFamilyId();
             var userId = httpContext.User.GetUserId();
+            var role = httpContext.User.GetRole();
             if (familyId == null || userId == null) return Results.Unauthorized();
+            if (role != "Parent") return Results.Forbid();
 
             var family = await db.Families.FindAsync(new object[] { familyId.Value }, ct);
             if (family == null) return Results.NotFound();

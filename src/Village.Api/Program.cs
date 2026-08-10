@@ -27,7 +27,15 @@ builder.Services.AddDbContext<VillageDbContext>(options =>
         builder.Configuration.GetConnectionString("Default"),
         npgsql => npgsql.MigrationsAssembly(typeof(VillageDbContext).Assembly.FullName)
     )
-    );
+);
+
+// Structured HTTP request logging (method, path, status — no bodies)
+builder.Services.AddHttpLogging(options =>
+{
+    options.LoggingFields = HttpLoggingFields.RequestMethod
+                          | HttpLoggingFields.RequestPath
+                          | HttpLoggingFields.ResponseStatusCode;
+});
 
 // Auth
 builder.Services.AddVillageAuth(builder.Configuration);
@@ -129,17 +137,36 @@ builder.Services.AddRateLimiter(options =>
 // Register outermost pipeline wrapper to catch exceptions BEFORE DeveloperExceptionPage
 builder.Services.AddSingleton<IStartupFilter, ExceptionLoggingStartupFilter>();
 
-// Forwarded headers for correct IP/protocol detection behind reverse proxy
+// Forwarded headers for correct IP/protocol detection behind reverse proxy.
+// Only trust the Docker bridge network (172.16.0.0/12) and any network
+// explicitly configured via env var (comma-separated CIDR list).
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
+
+    // Always trust the Docker bridge network
+    options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+
+    // Allow override via env var: FORWARDED_ALLOWED_NETWORKS=10.0.0.0/8,172.16.0.0/12
+    var allowed = Environment.GetEnvironmentVariable("FORWARDED_ALLOWED_NETWORKS");
+    if (!string.IsNullOrEmpty(allowed))
+    {
+        foreach (var cidr in allowed.Split(','))
+        {
+            var trimmed = cidr.Trim();
+            if (IPNetwork.TryParse(trimmed, out var network))
+                options.KnownNetworks.Add(network);
+        }
+    }
 });
 
 var app = builder.Build();
 
 app.UseForwardedHeaders();
+
+app.UseHttpLogging();
 
 app.UseExceptionHandler(); // calls registered IExceptionHandler services
 app.UseStatusCodePages();
