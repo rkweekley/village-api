@@ -351,37 +351,38 @@ public class ChoresModule : ICarterModule
             assignment.Status = ChoreStatus.Completed;
             assignment.CompletedAt = DateTime.UtcNow;
 
-            // Award points to the assigned person, not the completer.
-            // Parents/caregivers can complete on a child's behalf, but points
-            // always go to the person the chore was assigned to.
-            var assignedUser = await db.Users.FindAsync(new object[] { assignment.AssignedToId }, ct);
-            if (assignedUser != null)
+            // Only award points immediately if no approval is required.
+            // When RequiresApproval is true, points are awarded on approval.
+            if (!assignment.Chore.RequiresApproval)
             {
-                var previousBalance = assignedUser.PointsBalance;
-                assignedUser.PointsBalance += assignment.Chore.PointValue;
-
-                db.PointsTransactions.Add(new PointsTransaction
+                var assignedUser = await db.Users.FindAsync(new object[] { assignment.AssignedToId }, ct);
+                if (assignedUser != null)
                 {
-                    Id = Guid.NewGuid(),
-                    FamilyId = assignedUser.FamilyId,
-                    UserId = assignment.AssignedToId,
-                    Amount = assignment.Chore.PointValue,
-                    BalanceAfter = assignedUser.PointsBalance,
-                    Type = TransactionType.ChoreEarned,
-                    ReferenceId = completion.Id.ToString(),
-                    Note = $"Completed: {assignment.Chore.Name}",
-                    CreatedAt = DateTime.UtcNow
-                });
+                    assignedUser.PointsBalance += assignment.Chore.PointValue;
 
-                // Real-time: points updated
-                _ = pointsHub.NotifyPointsGroup(assignedUser.FamilyId.ToString(), HubMethods.PointsUpdated, new
-                {
-                    userId = assignment.AssignedToId,
-                    displayName = assignment.AssignedTo.DisplayName,
-                    pointsAwarded = assignment.Chore.PointValue,
-                    newBalance = assignedUser.PointsBalance,
-                    reason = $"Completed: {assignment.Chore.Name}"
-                });
+                    db.PointsTransactions.Add(new PointsTransaction
+                    {
+                        Id = Guid.NewGuid(),
+                        FamilyId = assignedUser.FamilyId,
+                        UserId = assignment.AssignedToId,
+                        Amount = assignment.Chore.PointValue,
+                        BalanceAfter = assignedUser.PointsBalance,
+                        Type = TransactionType.ChoreEarned,
+                        ReferenceId = completion.Id.ToString(),
+                        Note = $"Completed: {assignment.Chore.Name}",
+                        CreatedAt = DateTime.UtcNow
+                    });
+
+                    // Real-time: points updated
+                    _ = pointsHub.NotifyPointsGroup(assignedUser.FamilyId.ToString(), HubMethods.PointsUpdated, new
+                    {
+                        userId = assignment.AssignedToId,
+                        displayName = assignment.AssignedTo.DisplayName,
+                        pointsAwarded = assignment.Chore.PointValue,
+                        newBalance = assignedUser.PointsBalance,
+                        reason = $"Completed: {assignment.Chore.Name}"
+                    });
+                }
             }
 
             await db.SaveChangesAsync(ct);
@@ -438,38 +439,8 @@ public class ChoresModule : ICarterModule
 
             if (!request.Approved)
             {
-                // Rejected — reverse points
-                var assignedUser = await db.Users.FindAsync(
-                    new object[] { completion.Assignment.AssignedToId }, ct);
-                if (assignedUser != null)
-                {
-                    assignedUser.PointsBalance -= completion.PointsAwarded;
-
-                    db.PointsTransactions.Add(new PointsTransaction
-                    {
-                        Id = Guid.NewGuid(),
-                        FamilyId = assignedUser.FamilyId,
-                        UserId = assignedUser.Id,
-                        Amount = -completion.PointsAwarded,
-                        BalanceAfter = assignedUser.PointsBalance,
-                        Type = TransactionType.Adjustment,
-                        ReferenceId = completion.Id.ToString(),
-                        Note = $"Rejected: {completion.Assignment.Chore.Name}",
-                        CreatedAt = DateTime.UtcNow
-                    });
-
-                    // Real-time: points reversed
-                    _ = pointsHub.NotifyPointsGroup(familyId.ToString(), HubMethods.PointsUpdated, new
-                    {
-                        userId = assignedUser.Id,
-                        displayName = assignedUser.DisplayName,
-                        pointsAwarded = -completion.PointsAwarded,
-                        newBalance = assignedUser.PointsBalance,
-                        reason = $"Rejected: {completion.Assignment.Chore.Name}"
-                    });
-                }
-
-                // Re-open assignment
+                // Rejected — no points to reverse (points are only awarded on approval).
+                // Re-open the assignment so the kid can try again.
                 completion.Assignment.Status = ChoreStatus.Pending;
                 completion.Assignment.CompletedAt = null;
 
@@ -482,6 +453,37 @@ public class ChoresModule : ICarterModule
             }
             else
             {
+                // Approved — award points to the assigned person now.
+                var assignedUser = await db.Users.FindAsync(
+                    new object[] { completion.Assignment.AssignedToId }, ct);
+                if (assignedUser != null)
+                {
+                    assignedUser.PointsBalance += completion.PointsAwarded;
+
+                    db.PointsTransactions.Add(new PointsTransaction
+                    {
+                        Id = Guid.NewGuid(),
+                        FamilyId = assignedUser.FamilyId,
+                        UserId = assignedUser.Id,
+                        Amount = completion.PointsAwarded,
+                        BalanceAfter = assignedUser.PointsBalance,
+                        Type = TransactionType.ChoreEarned,
+                        ReferenceId = completion.Id.ToString(),
+                        Note = $"Approved: {completion.Assignment.Chore.Name}",
+                        CreatedAt = DateTime.UtcNow
+                    });
+
+                    // Real-time: points updated
+                    _ = pointsHub.NotifyPointsGroup(familyId.ToString(), HubMethods.PointsUpdated, new
+                    {
+                        userId = assignedUser.Id,
+                        displayName = assignedUser.DisplayName,
+                        pointsAwarded = completion.PointsAwarded,
+                        newBalance = assignedUser.PointsBalance,
+                        reason = $"Approved: {completion.Assignment.Chore.Name}"
+                    });
+                }
+
                 _ = choreHub.NotifyChoreGroup(familyId.ToString(), HubMethods.ChoreApproved, new
                 {
                     assignmentId = completion.Assignment.Id,
