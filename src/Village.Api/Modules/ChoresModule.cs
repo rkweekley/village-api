@@ -385,7 +385,14 @@ public class ChoresModule : ICarterModule
                 }
             }
 
-            await db.SaveChangesAsync(ct);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Results.Conflict(new { error = "This assignment was already modified. Please refresh and try again." });
+            }
 
             // Real-time: chore completed
             _ = choreHub.NotifyChoreGroup(assignment.Chore.FamilyId.ToString(), HubMethods.ChoreCompleted, new
