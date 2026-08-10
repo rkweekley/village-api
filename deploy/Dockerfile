@@ -13,7 +13,8 @@ RUN dotnet restore src/Village.Api/Village.Api.csproj
 
 # Copy all source and publish the API project
 COPY src/ src/
-RUN dotnet publish src/Village.Api/Village.Api.csproj -c Release -o /app/publish
+RUN dotnet clean src/Village.Api/Village.Api.csproj -c Release && \
+    dotnet publish src/Village.Api/Village.Api.csproj -c Release -o /app/publish
 
 # ── Runtime image ──
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.10 AS runtime
