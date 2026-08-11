@@ -2,6 +2,7 @@ using Carter;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
 using Microsoft.AspNetCore.Diagnostics;
@@ -29,6 +30,7 @@ builder.Services.AddDbContext<VillageDbContext>(options =>
         builder.Configuration.GetConnectionString("Default"),
         npgsql => npgsql.MigrationsAssembly(typeof(VillageDbContext).Assembly.FullName)
     )
+    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
 );
 
 // Structured HTTP request logging (method, path, status — no bodies)
