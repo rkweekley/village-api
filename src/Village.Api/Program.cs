@@ -262,6 +262,9 @@ if (app.Environment.IsDevelopment())
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<VillageDbContext>();
     await db.Database.MigrateAsync();
+
+    // Seed data (reads SEED_ENABLED, SEED_PARENT_PASSWORD, SEED_CHILD_PASSWORD from env)
+    await DbInitializer.SeedAsync(db);
 }
 
 await app.RunAsync();
