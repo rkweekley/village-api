@@ -109,6 +109,32 @@ public class StripeModule : ICarterModule
 
             var origin = httpContext.Request.Headers["Origin"].FirstOrDefault() ?? "https://villagefamily.app";
 
+            var email = httpContext.User.GetEmail();
+
+            // Reuse an existing Stripe customer to avoid minting a duplicate on every
+            // checkout attempt. The family only receives a StripeCustomerId via the
+            // webhook AFTER checkout completes, so on a first (or abandoned) checkout we
+            // look the customer up by email and persist it back to the family instead of
+            // letting Stripe create a brand-new customer each time.
+            var customerId = family.StripeCustomerId;
+            if (string.IsNullOrEmpty(customerId) && !string.IsNullOrEmpty(email))
+            {
+                var customerService = new CustomerService();
+                var listOptions = new CustomerListOptions
+                {
+                    Email = email,
+                    Limit = 1,
+                };
+                var existing = await customerService.ListAsync(listOptions, cancellationToken: ct);
+                customerId = existing?.Data?.FirstOrDefault()?.Id;
+
+                if (!string.IsNullOrEmpty(customerId))
+                {
+                    family.StripeCustomerId = customerId;
+                    await db.SaveChangesAsync(ct);
+                }
+            }
+
             var options = new SessionCreateOptions
             {
                 Mode = "subscription",
@@ -123,7 +149,6 @@ public class StripeModule : ICarterModule
                 SuccessUrl = $"{origin}/hub?session_id={{CHECKOUT_SESSION_ID}}",
                 CancelUrl = $"{origin}/family",
                 ClientReferenceId = familyId.Value.ToString(),
-                CustomerEmail = httpContext.User.GetEmail(),
                 AllowPromotionCodes = true,
                 Metadata = new Dictionary<string, string>
                 {
@@ -132,9 +157,10 @@ public class StripeModule : ICarterModule
                 }
             };
 
-            // If family already has a Stripe customer, reuse it
-            if (!string.IsNullOrEmpty(family.StripeCustomerId))
-                options.Customer = family.StripeCustomerId;
+            if (!string.IsNullOrEmpty(customerId))
+                options.Customer = customerId;
+            else
+                options.CustomerEmail = email;
 
             var service = new SessionService();
             var session = await service.CreateAsync(options, cancellationToken: ct);
