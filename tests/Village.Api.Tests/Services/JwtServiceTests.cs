@@ -19,7 +19,7 @@ public class JwtServiceTests
     }
 
     [Fact]
-    public void GenerateToken_ValidUserAndSecret_ReturnsToken()
+    public void GenerateAccessToken_ValidUserAndSecret_ReturnsToken()
     {
         // Arrange
         var config = CreateConfig("this-is-a-test-secret-that-is-long-enough-32!");
@@ -34,7 +34,7 @@ public class JwtServiceTests
         };
 
         // Act
-        var token = service.GenerateToken(user);
+        var token = service.GenerateAccessToken(user);
 
         // Assert
         Assert.NotNull(token);
@@ -43,25 +43,25 @@ public class JwtServiceTests
     }
 
     [Fact]
-    public void GenerateToken_InvalidUser_ThrowsArgumentNullException()
+    public void GenerateAccessToken_InvalidUser_ThrowsArgumentNullException()
     {
         // Arrange
         var config = CreateConfig("this-is-a-test-secret-that-is-long-enough-32!");
         var service = new JwtService(config);
 
         // Act & Assert
-        Assert.Throws<NullReferenceException>(() => service.GenerateToken(null!));
+        Assert.Throws<NullReferenceException>(() => service.GenerateAccessToken(null!));
     }
 
     [Fact]
-    public void GenerateToken_EmptySecret_ThrowsInvalidOperationException()
+    public void GenerateAccessToken_EmptySecret_ThrowsInvalidOperationException()
     {
         // Arrange
         var config = CreateConfig("");
         var service = new JwtService(config);
 
         // Act & Assert
-        Assert.Throws<InvalidOperationException>(() => service.GenerateToken(new User
+        Assert.Throws<InvalidOperationException>(() => service.GenerateAccessToken(new User
         {
             Id = Guid.NewGuid(),
             Email = "test@example.com",
@@ -72,7 +72,7 @@ public class JwtServiceTests
     }
 
     [Fact]
-    public void GenerateToken_IncludesUserClaims()
+    public void GenerateAccessToken_IncludesUserClaims()
     {
         // Arrange
         var config = CreateConfig("this-is-a-test-secret-that-is-long-enough-32!!");
@@ -89,7 +89,7 @@ public class JwtServiceTests
         };
 
         // Act
-        var token = service.GenerateToken(user);
+        var token = service.GenerateAccessToken(user);
 
         // Assert
         Assert.NotNull(token);
