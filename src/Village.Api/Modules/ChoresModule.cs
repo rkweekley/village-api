@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
 using Village.Api.Extensions;
 using Village.Api.Hubs;
+using Village.Domain;
 using Village.Domain.Entities;
 using Village.Infrastructure.Data;
 
@@ -38,11 +39,34 @@ public class ChoresModule : ICarterModule
                     c.RequiresApproval,
                     c.RequiresPhoto,
                     c.IsActive,
-                    CreatedById = c.CreatedById.HasValue ? c.CreatedById.Value.ToString() : null
+                    CreatedById = c.CreatedById.HasValue ? c.CreatedById.Value.ToString() : null,
+                    ParentChoreId = c.ParentChoreId.HasValue ? c.ParentChoreId.Value.ToString() : null
                 })
                 .ToListAsync(ct);
 
-            return Results.Ok(chores);
+            // Determine which chores are project containers (have subtasks) client-side.
+            var parentIds = chores
+                .Where(c => c.ParentChoreId != null)
+                .Select(c => Guid.Parse(c.ParentChoreId!))
+                .ToHashSet();
+
+            var result = chores.Select(c => new
+            {
+                c.Id,
+                c.Name,
+                c.Description,
+                c.PointValue,
+                c.Recurrence,
+                c.Difficulty,
+                c.RequiresApproval,
+                c.RequiresPhoto,
+                c.IsActive,
+                c.CreatedById,
+                c.ParentChoreId,
+                HasChildren = parentIds.Contains(c.Id)
+            });
+
+            return Results.Ok(result);
         })
         .WithDescription("Get all active chores for the family.");
 
@@ -61,9 +85,19 @@ public class ChoresModule : ICarterModule
             var role = httpContext.User.GetRole();
             if (role != "Parent" && role != "Caregiver") return Results.Forbid();
 
+            var choreId = Guid.NewGuid();
+            if (request.ParentChoreId.HasValue)
+            {
+                var parent = await db.Chores
+                    .FirstOrDefaultAsync(c => c.Id == request.ParentChoreId.Value && c.FamilyId == familyId.Value && c.IsActive, ct);
+                if (parent == null) return Results.NotFound(new { error = "Parent chore not found" });
+                var parentError = ChoreSubtaskRules.ValidateParentAssignment(request.ParentChoreId, choreId, parent.ParentChoreId);
+                if (parentError != null) return Results.BadRequest(new { error = parentError });
+            }
+
             var chore = new Chore
             {
-                Id = Guid.NewGuid(),
+                Id = choreId,
                 FamilyId = familyId.Value,
                 Name = request.Name.Trim(),
                 Description = request.Description?.Trim(),
@@ -73,6 +107,7 @@ public class ChoresModule : ICarterModule
                 RequiresApproval = request.RequiresApproval,
                 RequiresPhoto = request.RequiresPhoto,
                 CreatedById = userId,
+                ParentChoreId = request.ParentChoreId,
                 SortOrder = request.SortOrder,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -137,6 +172,25 @@ public class ChoresModule : ICarterModule
             if (request.RequiresPhoto.HasValue) chore.RequiresPhoto = request.RequiresPhoto.Value;
             if (request.SortOrder.HasValue) chore.SortOrder = request.SortOrder.Value;
             if (request.IsActive.HasValue) chore.IsActive = request.IsActive.Value;
+
+            // Re-parenting: Guid.Empty clears to top-level; otherwise validate the new parent.
+            if (request.ParentChoreId.HasValue)
+            {
+                var parentId = request.ParentChoreId.Value;
+                if (parentId == Guid.Empty)
+                {
+                    chore.ParentChoreId = null;
+                }
+                else
+                {
+                    var parent = await db.Chores
+                        .FirstOrDefaultAsync(c => c.Id == parentId && c.FamilyId == familyId.Value && c.IsActive, ct);
+                    if (parent == null) return Results.NotFound(new { error = "Parent chore not found" });
+                    var parentError = ChoreSubtaskRules.ValidateParentAssignment(parentId, id, parent.ParentChoreId);
+                    if (parentError != null) return Results.BadRequest(new { error = parentError });
+                    chore.ParentChoreId = parentId;
+                }
+            }
             chore.UpdatedAt = DateTime.UtcNow;
 
             await db.SaveChangesAsync(ct);
@@ -180,6 +234,17 @@ public class ChoresModule : ICarterModule
 
             chore.IsActive = false;
             chore.UpdatedAt = DateTime.UtcNow;
+
+            // Cascade: soft-delete any subtasks grouped under this chore.
+            var children = await db.Chores
+                .Where(c => c.ParentChoreId == id && c.FamilyId == familyId.Value && c.IsActive)
+                .ToListAsync(ct);
+            foreach (var child in children)
+            {
+                child.IsActive = false;
+                child.UpdatedAt = DateTime.UtcNow;
+            }
+
             await db.SaveChangesAsync(ct);
 
             // Real-time: notify family of chore deletion
@@ -263,6 +328,11 @@ public class ChoresModule : ICarterModule
             var chore = await db.Chores
                 .FirstOrDefaultAsync(c => c.Id == choreId && c.FamilyId == familyId.Value, ct);
             if (chore == null) return Results.NotFound(new { error = "Chore not found" });
+
+            // Project/container chores group subtasks and cannot be assigned directly.
+            var hasChildren = await db.Chores
+                .AnyAsync(c => c.ParentChoreId == choreId && c.FamilyId == familyId.Value && c.IsActive, ct);
+            if (hasChildren) return Results.BadRequest(new { error = "This chore groups subtasks and cannot be assigned. Assign its subtasks instead." });
 
             var assignment = new ChoreAssignment
             {
@@ -540,7 +610,8 @@ public record CreateChoreRequest(
     ChoreDifficulty Difficulty = ChoreDifficulty.Easy,
     bool RequiresApproval = true,
     bool RequiresPhoto = false,
-    int SortOrder = 0
+    int SortOrder = 0,
+    Guid? ParentChoreId = null
 );
 
 public record UpdateChoreRequest(
@@ -552,7 +623,8 @@ public record UpdateChoreRequest(
     bool? RequiresApproval,
     bool? RequiresPhoto,
     int? SortOrder,
-    bool? IsActive
+    bool? IsActive,
+    Guid? ParentChoreId
 );
 
 public record AssignChoreRequest(

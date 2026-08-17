@@ -32,10 +32,13 @@ public class Chore
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public Guid? CreatedById { get; set; }
+    public Guid? ParentChoreId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     public Family Family { get; set; } = null!;
     public User? Creator { get; set; }
     public ICollection<ChoreAssignment> Assignments { get; set; } = new List<ChoreAssignment>();
+    public Chore? Parent { get; set; }
+    public ICollection<Chore> Children { get; set; } = new List<Chore>();
 }

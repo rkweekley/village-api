@@ -98,6 +98,10 @@ public class VillageDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(c => c.CreatedById)
                 .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(c => c.Parent)
+                .WithMany(c => c.Children)
+                .HasForeignKey(c => c.ParentChoreId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ChoreAssignment
