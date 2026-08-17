@@ -397,6 +397,10 @@ public class ChoresModule : ICarterModule
             {
                 return Results.Conflict(new { error = "This assignment was already modified. Please refresh and try again." });
             }
+            catch (DbUpdateException)
+            {
+                return Results.Conflict(new { error = "This assignment was already completed. Please refresh and try again." });
+            }
 
             // Real-time: chore completed
             _ = choreHub.NotifyChoreGroup(assignment.Chore.FamilyId.ToString(), HubMethods.ChoreCompleted, new
@@ -453,9 +457,12 @@ public class ChoresModule : ICarterModule
             if (!request.Approved)
             {
                 // Rejected — no points to reverse (points are only awarded on approval).
-                // Re-open the assignment so the kid can try again.
+                // Re-open the assignment so the kid can try again. Delete the rejected
+                // completion so the one-to-one ChoreAssignmentId unique index doesn't
+                // block a fresh completion on retry.
                 completion.Assignment.Status = ChoreStatus.Pending;
                 completion.Assignment.CompletedAt = null;
+                db.ChoreCompletions.Remove(completion);
 
                 _ = choreHub.NotifyChoreGroup(familyId.ToString(), HubMethods.ChoreRejected, new
                 {
