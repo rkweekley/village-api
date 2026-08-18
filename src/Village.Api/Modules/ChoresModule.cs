@@ -277,6 +277,10 @@ public class ChoresModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             if (familyId == null) return Results.Unauthorized();
 
+            var userId = httpContext.User.GetUserId();
+            var role = httpContext.User.GetRole();
+            if (userId == null) return Results.Unauthorized();
+
             var chore = await db.Chores
                 .FirstOrDefaultAsync(c => c.Id == id && c.FamilyId == familyId.Value && c.IsActive, ct);
             if (chore == null) return Results.NotFound();
@@ -284,6 +288,16 @@ public class ChoresModule : ICarterModule
             // The lightweight toggle only applies to project tasks (children of a project).
             if (chore.ParentChoreId == null)
                 return Results.BadRequest(new { error = "Only project tasks can be toggled." });
+
+            // Managers can toggle any task; other members can only toggle tasks
+            // assigned to them (unassigned tasks remain a shared checklist).
+            if (!CanManageChildren(role))
+            {
+                var assignment = await db.ChoreAssignments
+                    .FirstOrDefaultAsync(a => a.ChoreId == chore.Id, ct);
+                if (assignment != null && assignment.AssignedToId != userId.Value)
+                    return Results.Forbid();
+            }
 
             chore.CompletedAt = chore.CompletedAt.HasValue ? null : DateTime.UtcNow;
             chore.UpdatedAt = DateTime.UtcNow;
