@@ -13,7 +13,7 @@ public class ChoresModule : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/chores").RequireAuthorization();
+        var group = app.MapGroup("/api/chores").RequireAuthorization().AddEndpointFilter<RequireSubscriptionFilter>();
 
         // GET /api/chores — list chores for the family
         group.MapGet("/", async (

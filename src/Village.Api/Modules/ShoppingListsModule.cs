@@ -12,7 +12,7 @@ public class ShoppingListsModule : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/shopping").RequireAuthorization();
+        var group = app.MapGroup("/api/shopping").RequireAuthorization().AddEndpointFilter<RequireSubscriptionFilter>();
 
         // GET /api/shopping — list all shopping lists for the family
         group.MapGet("/", async (

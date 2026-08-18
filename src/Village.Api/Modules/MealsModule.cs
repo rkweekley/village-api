@@ -10,8 +10,8 @@ public class MealsModule : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        var recipes = app.MapGroup("/api/recipes").RequireAuthorization();
-        var mealPlans = app.MapGroup("/api/meal-plans").RequireAuthorization();
+        var recipes = app.MapGroup("/api/recipes").RequireAuthorization().AddEndpointFilter<RequireSubscriptionFilter>();
+        var mealPlans = app.MapGroup("/api/meal-plans").RequireAuthorization().AddEndpointFilter<RequireSubscriptionFilter>();
 
         // ── Recipes ──
 

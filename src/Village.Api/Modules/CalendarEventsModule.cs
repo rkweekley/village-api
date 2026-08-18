@@ -10,7 +10,7 @@ public class CalendarEventsModule : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/calendar").RequireAuthorization();
+        var group = app.MapGroup("/api/calendar").RequireAuthorization().AddEndpointFilter<RequireSubscriptionFilter>();
 
         // GET /api/calendar — list events for a date range
         group.MapGet("/", async (

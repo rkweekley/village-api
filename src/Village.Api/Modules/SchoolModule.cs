@@ -10,7 +10,7 @@ public class SchoolModule : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/school").RequireAuthorization();
+        var group = app.MapGroup("/api/school").RequireAuthorization().AddEndpointFilter<RequireSubscriptionFilter>();
 
         // ── Subjects ──
 

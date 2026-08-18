@@ -12,7 +12,7 @@ public class RewardsModule : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/rewards").RequireAuthorization();
+        var group = app.MapGroup("/api/rewards").RequireAuthorization().AddEndpointFilter<RequireSubscriptionFilter>();
 
         // GET /api/rewards — list available rewards for the family
         group.MapGet("/", async (

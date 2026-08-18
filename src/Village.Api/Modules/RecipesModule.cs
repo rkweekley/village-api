@@ -1,6 +1,7 @@
 using System.Net;
 using Carter;
 using Village.Api.Services;
+using Village.Api.Extensions;
 
 namespace Village.Api.Modules;
 
@@ -11,7 +12,7 @@ public class RecipesModule : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/recipes/ideas").RequireAuthorization();
+        var group = app.MapGroup("/api/recipes/ideas").RequireAuthorization().AddEndpointFilter<RequireSubscriptionFilter>();
 
         // GET /api/recipes/ideas/categories — list available categories for filter chips
         group.MapGet("/categories", async (MealDbService mealDb) =>

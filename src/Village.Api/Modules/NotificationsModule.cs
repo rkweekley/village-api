@@ -13,7 +13,8 @@ public class NotificationsModule : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/notifications")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .AddEndpointFilter<RequireSubscriptionFilter>();
 
         // GET /api/notifications — paginated, unread first
         group.MapGet("", async (
