@@ -225,7 +225,7 @@ app.MapHub<Village.Api.Hubs.NotificationsHub>("/hubs/notifications");
 app.MapHub<Village.Api.Hubs.ShoppingHub>("/hubs/shopping");
 
 // Health check
-app.MapGet("/health", async (Village.Infrastructure.Data.VillageDbContext db, HttpContext http) =>
+app.MapGet("/health", async (Village.Infrastructure.Data.VillageDbContext db, HttpContext http, IConfiguration config) =>
 {
     var status = "healthy";
     var dbStatus = "unknown";
@@ -234,16 +234,16 @@ app.MapGet("/health", async (Village.Infrastructure.Data.VillageDbContext db, Ht
     try { await db.Database.CanConnectAsync(); dbStatus = "connected"; }
     catch { dbStatus = "unavailable"; status = "degraded"; }
 
-    var redis = http.RequestServices.GetService<StackExchange.Redis.IConnectionMultiplexer>();
-    if (redis != null)
+    // SignalR's Redis backplane manages its own connection internally, so there is no
+    // IConnectionMultiplexer registered in DI to resolve. Test connectivity directly.
+    var redisConfig = config.GetConnectionString("Redis") ?? "redis:6379";
+    try
     {
-        try { redisStatus = redis.IsConnected ? "connected" : "disconnected"; }
-        catch { redisStatus = "unavailable"; status = "degraded"; }
+        var redis = await StackExchange.Redis.ConnectionMultiplexer.ConnectAsync(redisConfig);
+        redisStatus = redis.IsConnected ? "connected" : "disconnected";
+        await redis.CloseAsync();
     }
-    else
-    {
-        redisStatus = "not_configured";
-    }
+    catch { redisStatus = "unavailable"; status = "degraded"; }
 
     return Results.Ok(new
     {
