@@ -25,7 +25,7 @@ public class AuthModule : ICarterModule
             var request = await httpContext.Request.ReadFromJsonAsync<RegisterRequest>(ct);
             if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
 
-            if (await db.Users.AnyAsync(u => u.Email == request.Email, ct))
+            if (await db.Users.AnyAsync(u => u.Email == request.Email.ToLowerInvariant().Trim(), ct))
                 return Results.Conflict(new { error = "Email already registered" });
 
             bool isNewFamily = string.IsNullOrWhiteSpace(request.InviteCode);
@@ -59,7 +59,7 @@ public class AuthModule : ICarterModule
                 DisplayName = request.DisplayName.Trim(),
                 Role = isNewFamily ? UserRole.Parent : UserRole.Child,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-                RefreshToken = refreshToken,
+                RefreshToken = BCrypt.Net.BCrypt.HashPassword(refreshToken),
                 RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(7),
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -130,7 +130,7 @@ public class AuthModule : ICarterModule
                 return Results.Unauthorized();
 
             var refreshToken = jwt.GenerateRefreshToken();
-            user.RefreshToken = refreshToken;
+            user.RefreshToken = BCrypt.Net.BCrypt.HashPassword(refreshToken);
             user.RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(7);
             user.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
@@ -167,14 +167,14 @@ public class AuthModule : ICarterModule
 
             var user = await db.Users.FirstOrDefaultAsync(u =>
                 u.Id == userId &&
-                u.RefreshToken == request.RefreshToken &&
                 u.RefreshTokenExpiresAt > DateTime.UtcNow, ct);
 
-            if (user == null)
+            if (user == null || user.RefreshToken == null ||
+                !BCrypt.Net.BCrypt.Verify(request.RefreshToken, user.RefreshToken))
                 return Results.Unauthorized();
 
             var newRefreshToken = jwt.GenerateRefreshToken();
-            user.RefreshToken = newRefreshToken;
+            user.RefreshToken = BCrypt.Net.BCrypt.HashPassword(newRefreshToken);
             user.RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(7);
             await db.SaveChangesAsync(ct);
 
