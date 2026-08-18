@@ -193,12 +193,19 @@ public class RewardsModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             if (userId == null || familyId == null) return Results.Unauthorized();
 
-            var reward = await db.Rewards
-                .FirstOrDefaultAsync(r => r.Id == rewardId && r.FamilyId == familyId.Value && r.IsActive, ct);
-            if (reward == null) return Results.NotFound(new { error = "Reward not found or inactive" });
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-            var user = await db.Users.FindAsync(new object[] { userId.Value }, ct);
+            // Lock the user row so concurrent redemptions can't double-spend points.
+            var user = await db.Users
+                .FromSqlRaw("""SELECT * FROM "Users" WHERE "Id" = {0} FOR UPDATE""", userId.Value)
+                .FirstOrDefaultAsync(ct);
             if (user == null) return Results.NotFound(new { error = "User not found" });
+
+            // Lock the reward row so concurrent redemptions can't exceed MaxRedemptions.
+            var reward = await db.Rewards
+                .FromSqlRaw("""SELECT * FROM "Rewards" WHERE "Id" = {0} AND "FamilyId" = {1} AND "IsActive" FOR UPDATE""", rewardId, familyId.Value)
+                .FirstOrDefaultAsync(ct);
+            if (reward == null) return Results.NotFound(new { error = "Reward not found or inactive" });
 
             if (user.PointsBalance < reward.PointCost)
                 return Results.Conflict(new { error = "Insufficient points", balance = user.PointsBalance, cost = reward.PointCost });
@@ -213,7 +220,6 @@ public class RewardsModule : ICarterModule
             }
 
             // Deduct points immediately
-            var previousBalance = user.PointsBalance;
             user.PointsBalance -= reward.PointCost;
 
             var redemption = new RewardRedemption
@@ -248,6 +254,7 @@ public class RewardsModule : ICarterModule
             });
 
             await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
 
             // Real-time notifications
             _ = pointsHub.NotifyPointsGroup(familyId.Value.ToString(), HubMethods.PointsUpdated, new
@@ -303,6 +310,11 @@ public class RewardsModule : ICarterModule
                 .Include(r => r.User)
                 .FirstOrDefaultAsync(r => r.Id == redemptionId && r.Reward.FamilyId == familyId.Value, ct);
             if (redemption == null) return Results.NotFound();
+
+            // Idempotency guard: prevent double-approve (double point award) or
+            // double-reject (double point refund).
+            if (redemption.Status != RedemptionStatus.Pending)
+                return Results.Conflict(new { error = "Redemption already processed" });
 
             redemption.ApprovedById = userId.Value;
             redemption.ApprovedAt = DateTime.UtcNow;

@@ -563,6 +563,10 @@ public class ChoresModule : ICarterModule
                     && c.Assignment.Chore.FamilyId == callerFamilyId.Value, ct);
             if (completion == null) return Results.NotFound();
 
+            // Idempotency guard: prevent double-approve (double point award).
+            if (completion.ApprovalStatus != ApprovalStatus.Pending)
+                return Results.Conflict(new { error = "Completion already processed" });
+
             var familyId = callerFamilyId.Value;
 
             completion.ApprovedById = userId.Value;
