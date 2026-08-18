@@ -141,56 +141,8 @@ public class NotificationsModule : ICarterModule
             return Results.NoContent();
         });
 
-        // POST /api/notifications — create a test notification
-        group.MapPost("/", async (
-            HttpContext httpContext,
-            NotificationService notificationService) =>
-        {
-            var request = await httpContext.Request.ReadFromJsonAsync<CreateNotificationRequest>();
-            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
-
-            var userId = httpContext.User.GetUserId();
-            if (userId == null) return Results.Unauthorized();
-
-            var familyId = httpContext.User.GetFamilyId();
-            if (familyId == null) return Results.Unauthorized();
-
-            var notification = await notificationService.CreateAsync(
-                familyId.Value,
-                userId.Value,
-                request.Type,
-                request.Title,
-                request.Body,
-                request.ReferenceId,
-                request.ReferenceType,
-                request.Priority
-            );
-
-            return Results.Created($"/api/notifications/{notification.Id}", new
-            {
-                notification.Id,
-                notification.Type,
-                notification.Priority,
-                notification.Title,
-                notification.Body,
-                notification.ReferenceId,
-                notification.ReferenceType,
-                notification.IsRead,
-                notification.CreatedAt
-            });
-        })
-        .Accepts<CreateNotificationRequest>("application/json");
     }
 }
-
-public record CreateNotificationRequest(
-    NotificationType Type,
-    string Title,
-    string? Body = null,
-    NotificationPriority Priority = NotificationPriority.Normal,
-    string? ReferenceId = null,
-    string? ReferenceType = null
-);
 
 /// <summary>
 /// Service for creating notifications and pushing via SignalR.
@@ -308,13 +260,5 @@ public class NotificationService
             }
             catch { }
         }
-    }
-
-    /// <summary>
-    /// Look up a user by ID (used by the test POST endpoint).
-    /// </summary>
-    public async Task<Village.Domain.Entities.User?> LookupUserAsync(Guid userId)
-    {
-        return await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
     }
 }
