@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Village.Domain.Entities;
 using Village.Infrastructure.Data;
 
 namespace Village.Api.Extensions;
@@ -20,25 +21,25 @@ public class RequireSubscriptionFilter : IEndpointFilter
         if (family == null) return Results.NotFound();
 
         // Auto-transition expired trials
-        if (family.SubscriptionStatus == "trial" && family.TrialEndsAt < DateTime.UtcNow)
+        if (family.SubscriptionStatus == SubscriptionState.Trial && family.TrialEndsAt < DateTime.UtcNow)
         {
-            family.SubscriptionStatus = "expired";
+            family.SubscriptionStatus = SubscriptionState.Expired;
             await db.SaveChangesAsync();
         }
 
         // Allow trial and active through; past_due gets a 7-day grace period
-        if (family.SubscriptionStatus is "trial" or "active")
+        if (family.SubscriptionStatus is SubscriptionState.Trial or SubscriptionState.Active)
             return await next(context);
 
         // Past due: check if within 7-day grace period from last expiry
-        if (family.SubscriptionStatus == "past_due")
+        if (family.SubscriptionStatus == SubscriptionState.PastDue)
         {
             if (family.SubscriptionExpiresAt.HasValue &&
                 family.SubscriptionExpiresAt.Value.AddDays(7) > DateTime.UtcNow)
                 return await next(context);
-            
+
             // Grace period over — mark expired
-            family.SubscriptionStatus = "expired";
+            family.SubscriptionStatus = SubscriptionState.Expired;
             await db.SaveChangesAsync();
         }
 

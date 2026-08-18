@@ -97,7 +97,7 @@ public class StripeModule : ICarterModule
             if (family == null) return Results.NotFound();
 
             // Guard: prevent duplicate checkout when family already has an active or past_due subscription
-            if (family.SubscriptionStatus == "active" || family.SubscriptionStatus == "past_due")
+            if (family.SubscriptionStatus == SubscriptionState.Active || family.SubscriptionStatus == SubscriptionState.PastDue)
                 return Results.BadRequest(new { error = "You already have an active subscription. Use the portal to manage it." });
 
             var priceId = request.Tier == "annual"
@@ -287,7 +287,7 @@ public class StripeModule : ICarterModule
                 tier = family.SubscriptionTier,
                 expiresAt = family.SubscriptionExpiresAt,
                 trialEndsAt = family.TrialEndsAt,
-                isInTrial = family.SubscriptionStatus == "trial",
+                isInTrial = family.SubscriptionStatus == SubscriptionState.Trial,
                 isExpiringSoon = family.TrialEndsAt > DateTime.UtcNow
                     && family.TrialEndsAt < DateTime.UtcNow.AddDays(3)
             });
@@ -311,12 +311,12 @@ public class StripeModule : ICarterModule
         logger.LogInformation("Checkout completed for family {FamilyId}", familyId);
 
         // Only provision if this is a new subscription (not already provisioned)
-        if (family.SubscriptionStatus == "active" && family.StripeSubscriptionId == session.SubscriptionId)
+        if (family.SubscriptionStatus == SubscriptionState.Active && family.StripeSubscriptionId == session.SubscriptionId)
             return;
 
         family.StripeCustomerId = session.CustomerId;
         family.StripeSubscriptionId = session.SubscriptionId;
-        family.SubscriptionStatus = "active";
+        family.SubscriptionStatus = SubscriptionState.Active;
         family.SubscriptionTier = session.Metadata.GetValueOrDefault("tier", "monthly");
         family.SubscriptionExpiresAt = DateTime.UtcNow.AddMonths(
             family.SubscriptionTier == "annual" ? 12 : 1);
@@ -353,7 +353,7 @@ public class StripeModule : ICarterModule
 
         logger.LogInformation("Invoice paid for family {FamilyId}", family.Id);
 
-        family.SubscriptionStatus = "active";
+        family.SubscriptionStatus = SubscriptionState.Active;
         family.SubscriptionExpiresAt = DateTime.UtcNow.AddMonths(
             family.SubscriptionTier == "annual" ? 12 : 1);
         await db.SaveChangesAsync(ct);
@@ -372,7 +372,7 @@ public class StripeModule : ICarterModule
 
         logger.LogWarning("Payment failed for family {FamilyId}", family.Id);
 
-        family.SubscriptionStatus = "past_due";
+        family.SubscriptionStatus = SubscriptionState.PastDue;
         await db.SaveChangesAsync(ct);
     }
 
@@ -388,7 +388,7 @@ public class StripeModule : ICarterModule
 
         logger.LogInformation("Subscription deleted for family {FamilyId}", family.Id);
 
-        family.SubscriptionStatus = "canceled";
+        family.SubscriptionStatus = SubscriptionState.Canceled;
         family.StripeSubscriptionId = null;
         await db.SaveChangesAsync(ct);
     }
