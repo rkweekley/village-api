@@ -48,6 +48,8 @@ builder.Services.AddScoped<NotificationService>();
 
 // Email
 builder.Services.AddHttpClient<IEmailService, MailgunEmailService>();
+builder.Services.AddSingleton<EmailBackgroundService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailBackgroundService>());
 
 // Stripe
 Stripe.StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY")

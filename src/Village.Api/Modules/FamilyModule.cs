@@ -109,7 +109,7 @@ public class FamilyModule : ICarterModule
         group.MapPost("/mine/invite", async (
             HttpContext httpContext,
             VillageDbContext db,
-            IEmailService emailService,
+            EmailBackgroundService emailQueue,
             CancellationToken ct) =>
         {
             var request = await httpContext.Request.ReadFromJsonAsync<SendInviteRequest>(ct);
@@ -127,18 +127,8 @@ public class FamilyModule : ICarterModule
             var family = await db.Families.FindAsync(new object[] { familyId.Value }, ct);
             if (family == null) return Results.NotFound();
 
-            // Fire-and-forget: email failure shouldn't block the response
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await emailService.SendInviteEmailAsync(request.Email.Trim(), family.Name, family.InviteCode);
-                }
-                catch (Exception ex)
-                {
-                    // Logged inside MailgunEmailService already
-                }
-            });
+            // Queue invite email for reliable background delivery
+            emailQueue.Enqueue(es => es.SendInviteEmailAsync(request.Email.Trim(), family.Name, family.InviteCode));
 
             return Results.Ok(new { message = $"Invite sent to {request.Email.Trim()}" });
         })

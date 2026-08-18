@@ -243,29 +243,15 @@ public class StripeModule : ICarterModule
                 // Status stays "active" — Stripe webhook will set "canceled" when period ends
                 await db.SaveChangesAsync(ct);
 
-                // Fire-and-forget: send emails
+                // Queue cancellation emails for reliable background delivery
                 var cancelingUser = await db.Users.FindAsync(new object[] { userId.Value }, ct);
-                var emailService = httpContext.RequestServices.GetService<IEmailService>();
-                if (emailService != null && cancelingUser != null)
+                if (cancelingUser != null)
                 {
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await emailService.SendSubscriptionCancelScheduledAsync(
-                                cancelingUser.Email, cancelingUser.DisplayName, endDate);
-                        }
-                        catch (Exception) { }
-                    });
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await emailService.SendSubscriptionCanceledAlertAsync(
-                                cancelingUser.Email, cancelingUser.DisplayName, family.Name, endDate);
-                        }
-                        catch (Exception) { }
-                    });
+                    var emailQueue = httpContext.RequestServices.GetRequiredService<EmailBackgroundService>();
+                    emailQueue.Enqueue(es => es.SendSubscriptionCancelScheduledAsync(
+                        cancelingUser.Email, cancelingUser.DisplayName, endDate));
+                    emailQueue.Enqueue(es => es.SendSubscriptionCanceledAlertAsync(
+                        cancelingUser.Email, cancelingUser.DisplayName, family.Name, endDate));
                 }
 
                 return Results.Ok(new

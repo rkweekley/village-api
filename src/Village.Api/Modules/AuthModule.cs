@@ -68,33 +68,10 @@ public class AuthModule : ICarterModule
 
             await db.SaveChangesAsync(ct);
 
-            // Fire-and-forget: send welcome email + admin notification
-            var emailService = httpContext.RequestServices.GetService<IEmailService>();
-            if (emailService != null)
-            {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await emailService.SendWelcomeEmailAsync(user.Email, user.DisplayName, family.Name);
-                    }
-                    catch (Exception)
-                    {
-                        // Don't fail registration if email fails
-                    }
-                });
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await emailService.SendNewSignupAlertAsync(user.Email, user.DisplayName, family.Name);
-                    }
-                    catch (Exception)
-                    {
-                        // Don't fail registration if email fails
-                    }
-                });
-            }
+            // Queue welcome email + admin notification for reliable background delivery
+            var emailQueue = httpContext.RequestServices.GetRequiredService<EmailBackgroundService>();
+            emailQueue.Enqueue(es => es.SendWelcomeEmailAsync(user.Email, user.DisplayName, family.Name));
+            emailQueue.Enqueue(es => es.SendNewSignupAlertAsync(user.Email, user.DisplayName, family.Name));
 
             return Results.Created($"/api/users/{user.Id}", new AuthResponse(
                 AccessToken: jwt.GenerateAccessToken(user),
