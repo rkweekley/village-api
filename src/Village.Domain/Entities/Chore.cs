@@ -33,6 +33,8 @@ public class Chore
     public bool IsActive { get; set; } = true;
     public Guid? CreatedById { get; set; }
     public Guid? ParentChoreId { get; set; }
+    public bool IsProject { get; set; }
+    public DateTime? CompletedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

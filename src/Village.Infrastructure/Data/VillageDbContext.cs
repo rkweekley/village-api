@@ -90,6 +90,7 @@ public class VillageDbContext : DbContext
         {
             e.HasKey(c => c.Id);
             e.Property(c => c.Name).HasMaxLength(200);
+            e.Property(c => c.IsProject).HasDefaultValue(false);
             e.HasOne(c => c.Family)
                 .WithMany()
                 .HasForeignKey(c => c.FamilyId)

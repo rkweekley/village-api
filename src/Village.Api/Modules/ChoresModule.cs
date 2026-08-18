@@ -39,6 +39,8 @@ public class ChoresModule : ICarterModule
                     c.RequiresApproval,
                     c.RequiresPhoto,
                     c.IsActive,
+                    c.IsProject,
+                    c.CompletedAt,
                     CreatedById = c.CreatedById.HasValue ? c.CreatedById.Value.ToString() : null,
                     ParentChoreId = c.ParentChoreId.HasValue ? c.ParentChoreId.Value.ToString() : null
                 })
@@ -61,6 +63,8 @@ public class ChoresModule : ICarterModule
                 c.RequiresApproval,
                 c.RequiresPhoto,
                 c.IsActive,
+                c.IsProject,
+                c.CompletedAt,
                 c.CreatedById,
                 c.ParentChoreId,
                 HasChildren = parentIds.Contains(c.Id)
@@ -85,6 +89,9 @@ public class ChoresModule : ICarterModule
             var role = httpContext.User.GetRole();
             if (role != "Parent" && role != "Caregiver") return Results.Forbid();
 
+            if (request.IsProject && request.ParentChoreId.HasValue)
+                return Results.BadRequest(new { error = "A project must be top-level (no parent)." });
+
             var choreId = Guid.NewGuid();
             if (request.ParentChoreId.HasValue)
             {
@@ -106,6 +113,7 @@ public class ChoresModule : ICarterModule
                 Difficulty = request.Difficulty,
                 RequiresApproval = request.RequiresApproval,
                 RequiresPhoto = request.RequiresPhoto,
+                IsProject = request.IsProject,
                 CreatedById = userId,
                 ParentChoreId = request.ParentChoreId,
                 SortOrder = request.SortOrder,
@@ -258,6 +266,41 @@ public class ChoresModule : ICarterModule
         })
         .WithDescription("Soft-delete a chore (marks inactive).");
 
+        // POST /api/chores/{id}/toggle-complete — flip a task's done state (lightweight checklist)
+        group.MapPost("/{id:guid}/toggle-complete", async (
+            Guid id,
+            HttpContext httpContext,
+            VillageDbContext db,
+            IHubContext<ChoreHub> choreHub,
+            CancellationToken ct) =>
+        {
+            var familyId = httpContext.User.GetFamilyId();
+            if (familyId == null) return Results.Unauthorized();
+
+            var chore = await db.Chores
+                .FirstOrDefaultAsync(c => c.Id == id && c.FamilyId == familyId.Value && c.IsActive, ct);
+            if (chore == null) return Results.NotFound();
+
+            // The lightweight toggle only applies to project tasks (children of a project).
+            if (chore.ParentChoreId == null)
+                return Results.BadRequest(new { error = "Only project tasks can be toggled." });
+
+            chore.CompletedAt = chore.CompletedAt.HasValue ? null : DateTime.UtcNow;
+            chore.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            _ = choreHub.NotifyChoreGroup(familyId.Value.ToString(), HubMethods.ChoreUpdated, new
+            {
+                chore.Id,
+                chore.Name,
+                chore.CompletedAt,
+                chore.IsProject
+            });
+
+            return Results.Ok(new { chore.Id, chore.CompletedAt });
+        })
+        .WithDescription("Toggle a project task's completed state.");
+
         // ── Assignments ──
 
         // GET /api/chores/assignments — today's assignments and upcoming for the family
@@ -330,6 +373,8 @@ public class ChoresModule : ICarterModule
             if (chore == null) return Results.NotFound(new { error = "Chore not found" });
 
             // Project/container chores group subtasks and cannot be assigned directly.
+            if (chore.IsProject) return Results.BadRequest(new { error = "Projects group tasks and cannot be assigned. Assign a task instead." });
+
             var hasChildren = await db.Chores
                 .AnyAsync(c => c.ParentChoreId == choreId && c.FamilyId == familyId.Value && c.IsActive, ct);
             if (hasChildren) return Results.BadRequest(new { error = "This chore groups subtasks and cannot be assigned. Assign its subtasks instead." });
@@ -611,7 +656,8 @@ public record CreateChoreRequest(
     bool RequiresApproval = true,
     bool RequiresPhoto = false,
     int SortOrder = 0,
-    Guid? ParentChoreId = null
+    Guid? ParentChoreId = null,
+    bool IsProject = false
 );
 
 public record UpdateChoreRequest(
