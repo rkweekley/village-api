@@ -94,12 +94,12 @@ public class FamilyModule : ICarterModule
 
             if (family == null) return Results.NotFound(new { error = "Invalid invite code" });
 
+            // Return only what registration needs (id + display name); don't leak
+            // member count or re-echo the code to unauthenticated callers.
             return Results.Ok(new
             {
                 family.Id,
-                family.Name,
-                family.InviteCode,
-                memberCount = await db.Users.CountAsync(u => u.FamilyId == family.Id, ct)
+                family.Name
             });
         })
         .AllowAnonymous()
