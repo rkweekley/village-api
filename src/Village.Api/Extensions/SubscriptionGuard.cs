@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Village.Domain.Entities;
 using Village.Infrastructure.Data;
 
@@ -16,6 +17,11 @@ public class RequireSubscriptionFilter : IEndpointFilter
         var db = context.HttpContext.RequestServices.GetRequiredService<VillageDbContext>();
         var familyId = context.HttpContext.User.GetFamilyId();
         if (familyId == null) return Results.Unauthorized();
+
+        // v1.0 free mode: skip billing enforcement when disabled (auth checked above).
+        var config = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+        if (!config.GetValue<bool>("Subscription:RequireActive"))
+            return await next(context);
 
         var family = await db.Families.FindAsync(new object[] { familyId.Value });
         if (family == null) return Results.NotFound();
