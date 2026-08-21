@@ -45,10 +45,11 @@ public class FamilyModule : ICarterModule
                 {
                     m.Id,
                     m.DisplayName,
-                    m.Email,
+                    Email = m.IsManaged ? null : m.Email,
                     Role = m.Role.ToString(),
                     m.PointsBalance,
-                    m.BirthDate
+                    m.BirthDate,
+                    m.IsManaged
                 })
             });
         })
@@ -201,6 +202,97 @@ public class FamilyModule : ICarterModule
             return Results.Ok(new { message = "Member removed" });
         })
         .WithDescription("Remove a family member (Parent only).");
+
+        // POST /api/families/mine/children — create a parent-managed child profile
+        group.MapPost("/mine/children", async (
+            HttpContext httpContext,
+            VillageDbContext db,
+            CancellationToken ct) =>
+        {
+            var request = await httpContext.Request.ReadFromJsonAsync<CreateChildRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
+            var familyId = httpContext.User.GetFamilyId();
+            var role = httpContext.User.GetRole();
+            if (familyId == null) return Results.Unauthorized();
+            if (role != "Parent" && role != "Caregiver")
+                return Results.Forbid();
+
+            if (string.IsNullOrWhiteSpace(request.DisplayName))
+                return Results.BadRequest(new { error = "A name is required." });
+
+            var family = await db.Families.FindAsync(new object[] { familyId.Value }, ct);
+            if (family == null) return Results.NotFound();
+
+            // The parent creating this profile is the parental-consent step for
+            // collecting a minor's data (COPPA). The child cannot log in: no
+            // password, and a synthetic non-deliverable email satisfies the
+            // unique index on User.Email.
+            var child = new User
+            {
+                Id = Guid.NewGuid(),
+                FamilyId = familyId.Value,
+                Email = $"managed_{Guid.NewGuid():N}@village.local",
+                DisplayName = request.DisplayName.Trim(),
+                Role = UserRole.Child,
+                IsManaged = true,
+                BirthDate = request.BirthDate,
+                PasswordHash = string.Empty,
+                PointsBalance = 0,
+            };
+            db.Users.Add(child);
+            await db.SaveChangesAsync(ct);
+
+            return Results.Created($"/api/families/mine/children/{child.Id}", new
+            {
+                child.Id,
+                child.DisplayName,
+                Role = child.Role.ToString(),
+                child.BirthDate,
+                child.IsManaged,
+                child.PointsBalance
+            });
+        })
+        .WithDescription("Create a parent-managed child profile (Parent/Caregiver only).");
+
+        // PATCH /api/families/mine/members/{userId} — update a managed child's name / birth date
+        group.MapPatch("/mine/members/{userId:guid}", async (
+            Guid userId,
+            HttpContext httpContext,
+            VillageDbContext db,
+            CancellationToken ct) =>
+        {
+            var request = await httpContext.Request.ReadFromJsonAsync<UpdateMemberRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
+            var familyId = httpContext.User.GetFamilyId();
+            var role = httpContext.User.GetRole();
+            if (familyId == null) return Results.Unauthorized();
+            if (role != "Parent" && role != "Caregiver")
+                return Results.Forbid();
+
+            var member = await db.Users
+                .FirstOrDefaultAsync(u => u.Id == userId && u.FamilyId == familyId.Value, ct);
+            if (member == null) return Results.NotFound();
+            if (!member.IsManaged)
+                return Results.BadRequest(new { error = "Only managed child profiles can be edited here." });
+
+            if (!string.IsNullOrWhiteSpace(request.DisplayName))
+                member.DisplayName = request.DisplayName.Trim();
+            if (request.BirthDate != null)
+                member.BirthDate = request.BirthDate;
+            member.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new
+            {
+                member.Id,
+                member.DisplayName,
+                member.BirthDate,
+                member.IsManaged
+            });
+        })
+        .WithDescription("Update a managed child's name or birth date (Parent/Caregiver only).");
     }
 }
 
@@ -216,4 +308,14 @@ public record ChangeRoleRequest(
 
 public record SendInviteRequest(
     string Email
+);
+
+public record CreateChildRequest(
+    string DisplayName,
+    DateOnly? BirthDate
+);
+
+public record UpdateMemberRequest(
+    string? DisplayName,
+    DateOnly? BirthDate
 );

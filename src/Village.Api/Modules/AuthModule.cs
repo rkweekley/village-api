@@ -66,7 +66,7 @@ public class AuthModule : ICarterModule
                 Email = request.Email.ToLowerInvariant().Trim(),
                 DisplayName = request.DisplayName.Trim(),
                 BirthDate = request.BirthDate,
-                Role = isNewFamily ? UserRole.Parent : UserRole.Child,
+                Role = isNewFamily ? UserRole.Parent : UserRole.Caregiver,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
                 RefreshToken = BCrypt.Net.BCrypt.HashPassword(refreshToken),
                 RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(7),
