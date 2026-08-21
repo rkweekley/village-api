@@ -284,6 +284,7 @@ public class StripeModule : ICarterModule
             return Results.Ok(new
             {
                 status = family.SubscriptionStatus,
+                provider = family.SubscriptionProvider,
                 tier = family.SubscriptionTier,
                 expiresAt = family.SubscriptionExpiresAt,
                 trialEndsAt = family.TrialEndsAt,
@@ -316,6 +317,7 @@ public class StripeModule : ICarterModule
 
         family.StripeCustomerId = session.CustomerId;
         family.StripeSubscriptionId = session.SubscriptionId;
+        family.SubscriptionProvider = SubscriptionProviders.Stripe;
         family.SubscriptionStatus = SubscriptionState.Active;
         family.SubscriptionTier = session.Metadata.GetValueOrDefault("tier", "monthly");
         family.SubscriptionExpiresAt = DateTime.UtcNow.AddMonths(

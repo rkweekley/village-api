@@ -9,6 +9,9 @@ public class Family
     public string Timezone { get; set; } = "America/New_York";
     public string? StripeCustomerId { get; set; }
     public string? StripeSubscriptionId { get; set; }
+    public string? SubscriptionProvider { get; set; }
+    public string? AppStoreOriginalTransactionId { get; set; }
+    public string? GooglePlayPurchaseToken { get; set; }
     public string SubscriptionStatus { get; set; } = "trial";
     public string? SubscriptionTier { get; set; }
     public DateTime? SubscriptionExpiresAt { get; set; }
