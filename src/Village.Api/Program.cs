@@ -14,6 +14,7 @@ using Village.Api.Extensions;
 using Village.Api.Hubs;
 using Village.Api.Modules;
 using Village.Api.Services;
+using Village.Api.Services.Billing;
 using Village.Api;
 using Village.Infrastructure.Data;
 
@@ -54,6 +55,11 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailBackgroundSer
 // Stripe
 Stripe.StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY")
     ?? builder.Configuration["Stripe:SecretKey"];
+
+// Store billing (Apple IAP + Google Play Billing) — server-side receipt verification
+builder.Services.AddScoped<SubscriptionSyncService>();
+builder.Services.AddHttpClient<AppleIapService>();
+builder.Services.AddHttpClient<GooglePlayService>();
 
 // Recipe ideas — TheMealDB proxy (free, no API key)
 builder.Services.AddHttpClient<MealDbService>();

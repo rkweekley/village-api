@@ -11,13 +11,17 @@ public class Family
     public string? StripeSubscriptionId { get; set; }
     public string? SubscriptionProvider { get; set; }
     public string? AppStoreOriginalTransactionId { get; set; }
+    public string? AppStoreAppAccountToken { get; set; }
+    public string? AppStoreEnvironment { get; set; }
     public string? GooglePlayPurchaseToken { get; set; }
+    public string? GooglePlaySubscriptionId { get; set; }
+    public bool? AutoRenewEnabled { get; set; }
     public string SubscriptionStatus { get; set; } = "trial";
     public string? SubscriptionTier { get; set; }
     public DateTime? SubscriptionExpiresAt { get; set; }
     public DateTime? SubscriptionCanceledAt { get; set; }
     public Guid? SubscriptionCanceledByUserId { get; set; }
-    public DateTime TrialEndsAt { get; set; } = DateTime.UtcNow.AddDays(14);
+    public DateTime TrialEndsAt { get; set; } = DateTime.UtcNow.AddDays(30);
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
