@@ -28,6 +28,14 @@ public class AuthModule : ICarterModule
             if (await db.Users.AnyAsync(u => u.Email == request.Email.ToLowerInvariant().Trim(), ct))
                 return Results.Conflict(new { error = "Email already registered" });
 
+            // Age gate: children under 13 cannot self-register. A parent or guardian
+            // must create the family account and add them as a managed child profile.
+            if (request.BirthDate is { } birthDate && AgeInYears(birthDate) < 13)
+                return Results.BadRequest(new
+                {
+                    error = "You must be at least 13 to create an account. Ask a parent or guardian to create the family account and add you."
+                });
+
             bool isNewFamily = string.IsNullOrWhiteSpace(request.InviteCode);
             Family family;
 
@@ -57,6 +65,7 @@ public class AuthModule : ICarterModule
                 FamilyId = family.Id,
                 Email = request.Email.ToLowerInvariant().Trim(),
                 DisplayName = request.DisplayName.Trim(),
+                BirthDate = request.BirthDate,
                 Role = isNewFamily ? UserRole.Parent : UserRole.Child,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
                 RefreshToken = BCrypt.Net.BCrypt.HashPassword(refreshToken),
@@ -319,6 +328,14 @@ public class AuthModule : ICarterModule
         .AllowAnonymous()
         .RequireRateLimiting("Auth")
         .WithDescription("Submit a contact form message.");
+    }
+
+    private static int AgeInYears(DateOnly birthDate)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var age = today.Year - birthDate.Year;
+        if (birthDate.AddYears(age) > today) age--;
+        return age;
     }
 
     private static string GenerateInviteCode()

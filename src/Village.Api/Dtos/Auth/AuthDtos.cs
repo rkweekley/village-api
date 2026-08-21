@@ -4,7 +4,8 @@ public record RegisterRequest(
     string Email,
     string DisplayName,
     string Password,
-    string? InviteCode
+    string? InviteCode,
+    DateOnly? BirthDate = null
 );
 
 public record LoginRequest(
