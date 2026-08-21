@@ -119,7 +119,7 @@ public class FamilyModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             var role = httpContext.User.GetRole();
             if (familyId == null) return Results.Unauthorized();
-            if (role != "Parent" && role != "Caregiver")
+            if (role != "Parent")
                 return Results.Forbid();
 
             if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@'))
@@ -215,7 +215,7 @@ public class FamilyModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             var role = httpContext.User.GetRole();
             if (familyId == null) return Results.Unauthorized();
-            if (role != "Parent" && role != "Caregiver")
+            if (role != "Parent")
                 return Results.Forbid();
 
             if (string.IsNullOrWhiteSpace(request.DisplayName))
@@ -268,7 +268,7 @@ public class FamilyModule : ICarterModule
             var familyId = httpContext.User.GetFamilyId();
             var role = httpContext.User.GetRole();
             if (familyId == null) return Results.Unauthorized();
-            if (role != "Parent" && role != "Caregiver")
+            if (role != "Parent")
                 return Results.Forbid();
 
             var member = await db.Users
