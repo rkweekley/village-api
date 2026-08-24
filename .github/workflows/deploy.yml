@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, production/v1]
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
