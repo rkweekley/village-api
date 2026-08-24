@@ -84,6 +84,46 @@ public class SchoolModule : ICarterModule
         .Accepts<CreateSubjectRequest>("application/json")
         .WithDescription("Create a new school subject.");
 
+        // PUT /api/school/subjects/{id} — update an existing subject
+        group.MapPut("/subjects/{id:guid}", async (
+            Guid id,
+            HttpContext httpContext,
+            VillageDbContext db,
+            CancellationToken ct) =>
+        {
+            var request = await httpContext.Request.ReadFromJsonAsync<UpdateSubjectRequest>(ct);
+            if (request == null) return Results.BadRequest(new { error = "Invalid request body" });
+
+            var familyId = httpContext.User.GetFamilyId();
+            if (familyId == null) return Results.Unauthorized();
+
+            var role = httpContext.User.GetRole();
+            if (role != "Parent" && role != "Caregiver") return Results.Forbid();
+
+            var subject = await db.SchoolSubjects
+                .FirstOrDefaultAsync(s => s.Id == id && s.FamilyId == familyId.Value, ct);
+            if (subject == null) return Results.NotFound(new { error = "Subject not found" });
+
+            subject.Name = request.Name.Trim();
+            subject.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+            subject.Color = string.IsNullOrWhiteSpace(request.Color) ? null : request.Color;
+            subject.SortOrder = request.SortOrder;
+
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new
+            {
+                subject.Id,
+                subject.Name,
+                subject.Description,
+                subject.Color,
+                subject.SortOrder,
+                subject.IsActive
+            });
+        })
+        .Accepts<UpdateSubjectRequest>("application/json")
+        .WithDescription("Update an existing school subject.");
+
         // ── School Work ──
 
         // GET /api/school — list school work (optional status filter)
@@ -364,6 +404,13 @@ public class SchoolModule : ICarterModule
 // ── Request DTOs ──
 
 public record CreateSubjectRequest(
+    string Name,
+    string? Description,
+    string? Color,
+    int SortOrder = 0
+);
+
+public record UpdateSubjectRequest(
     string Name,
     string? Description,
     string? Color,
