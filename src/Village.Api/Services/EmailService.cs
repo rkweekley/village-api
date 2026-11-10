@@ -43,7 +43,7 @@ public class MailgunEmailService : IEmailService
             return;
         }
 
-        var resetUrl = $"https://my.villagefamily.app/#/reset-password?token={Uri.EscapeDataString(resetToken)}&email={Uri.EscapeDataString(email)}";
+        var resetUrl = $"https://my.villagefamily.app/#/reset-password/{Uri.EscapeDataString(resetToken)}?email={Uri.EscapeDataString(email)}";
         var html = $"<h2>Reset your Village password</h2><p>Hi {displayName},</p><p>Someone requested a password reset. Click below to reset:</p><p><a href=\"{resetUrl}\">Reset Password</a></p><p>This link expires in 1 hour. If you didn't request this, ignore this email.</p>";
         await SendEmailAsync(email, "Reset your Village password", html);
     }
