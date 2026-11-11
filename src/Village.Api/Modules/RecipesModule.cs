@@ -15,56 +15,91 @@ public class RecipesModule : ICarterModule
         var group = app.MapGroup("/api/recipes/ideas").RequireAuthorization().AddEndpointFilter<RequireSubscriptionFilter>();
 
         // GET /api/recipes/ideas/categories — list available categories for filter chips
-        group.MapGet("/categories", async (MealDbService mealDb) =>
-        {
-            var response = await mealDb.GetCategoriesAsync();
-            var categories = response?.Categories ?? [];
-            return Results.Ok(categories.Select(c => new CategoryDto(
-                c.IdCategory, c.StrCategory, c.StrCategoryThumb, c.StrCategoryDescription)));
-        });
+        group.MapGet("/categories", async (MealDbService mealDb, ILogger<RecipesModule> logger) =>
+            await HandleUpstreamErrorsAsync(async () =>
+            {
+                var response = await mealDb.GetCategoriesAsync();
+                var categories = response?.Categories ?? [];
+                return Results.Ok(categories.Select(c => new CategoryDto(
+                    c.IdCategory, c.StrCategory, c.StrCategoryThumb, c.StrCategoryDescription)));
+            }, logger));
 
         // GET /api/recipes/ideas/category/{category} — browse recipes by category
-        group.MapGet("/category/{category}", async (string category, MealDbService mealDb) =>
-        {
-            if (string.IsNullOrWhiteSpace(category))
-                return Results.BadRequest(new { error = "Category is required" });
-            var response = await mealDb.FilterByCategoryAsync(category);
-            if (response?.Meals == null || response.Meals.Count == 0)
-                return Results.Ok(Array.Empty<object>());
-            // Filter endpoint returns summaries — return as-is (no ingredient detail yet)
-            return Results.Ok(response.Meals.Select(m => new
+        group.MapGet("/category/{category}", async (string category, MealDbService mealDb, ILogger<RecipesModule> logger) =>
+            await HandleUpstreamErrorsAsync(async () =>
             {
-                id = m.IdMeal,
-                title = m.StrMeal,
-                image = m.StrMealThumb
-            }));
-        });
+                if (string.IsNullOrWhiteSpace(category))
+                    return Results.BadRequest(new { error = "Category is required" });
+                var response = await mealDb.FilterByCategoryAsync(category);
+                if (response?.Meals == null || response.Meals.Count == 0)
+                    return Results.Ok(Array.Empty<object>());
+                // Filter endpoint returns summaries — return as-is (no ingredient detail yet)
+                return Results.Ok(response.Meals.Select(m => new
+                {
+                    id = m.IdMeal,
+                    title = m.StrMeal,
+                    image = m.StrMealThumb
+                }));
+            }, logger));
 
         // GET /api/recipes/ideas/search?q=chicken — search by name
-        group.MapGet("/search", async (string q, MealDbService mealDb) =>
-        {
-            if (string.IsNullOrWhiteSpace(q))
-                return Results.BadRequest(new { error = "Query is required" });
-            var response = await mealDb.SearchByNameAsync(q);
-            if (response?.Meals == null) return Results.Ok(Array.Empty<RecipeIdeaDto>());
-            return Results.Ok(response.Meals.Select(ToRecipeIdea));
-        });
+        group.MapGet("/search", async (string q, MealDbService mealDb, ILogger<RecipesModule> logger) =>
+            await HandleUpstreamErrorsAsync(async () =>
+            {
+                if (string.IsNullOrWhiteSpace(q))
+                    return Results.BadRequest(new { error = "Query is required" });
+                var response = await mealDb.SearchByNameAsync(q);
+                if (response?.Meals == null) return Results.Ok(Array.Empty<RecipeIdeaDto>());
+                return Results.Ok(response.Meals.Select(ToRecipeIdea));
+            }, logger));
 
         // GET /api/recipes/ideas/random — surprise me
-        group.MapGet("/random", async (MealDbService mealDb) =>
-        {
-            var response = await mealDb.GetRandomAsync();
-            var meal = response?.Meals?.FirstOrDefault();
-            return meal != null ? Results.Ok(ToRecipeIdea(meal)) : Results.NotFound();
-        });
+        group.MapGet("/random", async (MealDbService mealDb, ILogger<RecipesModule> logger) =>
+            await HandleUpstreamErrorsAsync(async () =>
+            {
+                var response = await mealDb.GetRandomAsync();
+                var meal = response?.Meals?.FirstOrDefault();
+                return meal != null ? Results.Ok(ToRecipeIdea(meal)) : Results.NotFound();
+            }, logger));
 
         // GET /api/recipes/ideas/{id} — full recipe detail
-        group.MapGet("/{id}", async (string id, MealDbService mealDb) =>
+        group.MapGet("/{id}", async (string id, MealDbService mealDb, ILogger<RecipesModule> logger) =>
+            await HandleUpstreamErrorsAsync(async () =>
+            {
+                var response = await mealDb.LookupAsync(id);
+                var meal = response?.Meals?.FirstOrDefault();
+                return meal != null ? Results.Ok(ToRecipeIdea(meal)) : Results.NotFound();
+            }, logger));
+    }
+
+    /// <summary>
+    /// Map upstream TheMealDB failures to 502/504 so a third-party outage is
+    /// distinguishable from a genuine village-api 500. The URL and upstream status
+    /// are logged by <see cref="MealDbService"/> when the request fails.
+    /// </summary>
+    private static async Task<IResult> HandleUpstreamErrorsAsync(
+        Func<Task<IResult>> action,
+        ILogger<RecipesModule> logger)
+    {
+        try
         {
-            var response = await mealDb.LookupAsync(id);
-            var meal = response?.Meals?.FirstOrDefault();
-            return meal != null ? Results.Ok(ToRecipeIdea(meal)) : Results.NotFound();
-        });
+            return await action();
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Recipe source unavailable: TheMealDB returned status {Status}", ex.StatusCode);
+            return Results.Problem(
+                title: "Recipe source unavailable",
+                detail: "The external recipe provider could not be reached.",
+                statusCode: StatusCodes.Status502BadGateway);
+        }
+        catch (TaskCanceledException ex)
+        {
+            logger.LogWarning(ex, "Recipe source timed out");
+            return Results.Problem(
+                title: "Recipe source timed out",
+                statusCode: StatusCodes.Status504GatewayTimeout);
+        }
     }
 
     /// <summary>
