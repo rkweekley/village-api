@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Caching.Memory;
+
 namespace Village.Api.Services;
 
 /// <summary>
@@ -8,50 +10,97 @@ namespace Village.Api.Services;
 public class MealDbService
 {
     private readonly HttpClient _http;
+    private readonly IMemoryCache _cache;
+    private readonly ILogger<MealDbService> _logger;
     private const string BaseUrl = "https://www.themealdb.com/api/json/v1/1";
 
-    public MealDbService(HttpClient http) => _http = http;
+    // Near-static endpoints are cached so ordinary browsing doesn't re-fetch from the
+    // free upstream API on every request. /random and /search stay uncached on purpose.
+    private static readonly TimeSpan CategoriesTtl = TimeSpan.FromHours(24);
+    private static readonly TimeSpan FilterTtl = TimeSpan.FromHours(1);
+    private static readonly TimeSpan LookupTtl = TimeSpan.FromHours(6);
 
-    /// <summary>Search recipes by name.</summary>
-    public async Task<MealDbSearchResponse?> SearchByNameAsync(string query)
+    public MealDbService(HttpClient http, IMemoryCache cache, ILogger<MealDbService> logger)
     {
-        var url = $"{BaseUrl}/search.php?s={Uri.EscapeDataString(query)}";
-        return await _http.GetFromJsonAsync<MealDbSearchResponse>(url);
+        _http = http;
+        _cache = cache;
+        _logger = logger;
     }
+
+    /// <summary>Search recipes by name (uncached).</summary>
+    public Task<MealDbSearchResponse?> SearchByNameAsync(string query) =>
+        GetAsync<MealDbSearchResponse>($"{BaseUrl}/search.php?s={Uri.EscapeDataString(query)}");
 
     /// <summary>Browse recipes by category (Beef, Chicken, Seafood, etc.).</summary>
-    public async Task<MealDbFilterResponse?> FilterByCategoryAsync(string category)
-    {
-        var url = $"{BaseUrl}/filter.php?c={Uri.EscapeDataString(category)}";
-        return await _http.GetFromJsonAsync<MealDbFilterResponse>(url);
-    }
+    public Task<MealDbFilterResponse?> FilterByCategoryAsync(string category) =>
+        GetAsync<MealDbFilterResponse>(
+            $"{BaseUrl}/filter.php?c={Uri.EscapeDataString(category)}",
+            cacheKey: $"mealdb:filter:c:{category.ToLowerInvariant()}",
+            ttl: FilterTtl);
 
     /// <summary>Filter recipes by main ingredient.</summary>
-    public async Task<MealDbFilterResponse?> FilterByIngredientAsync(string ingredient)
-    {
-        var url = $"{BaseUrl}/filter.php?i={Uri.EscapeDataString(ingredient)}";
-        return await _http.GetFromJsonAsync<MealDbFilterResponse>(url);
-    }
+    public Task<MealDbFilterResponse?> FilterByIngredientAsync(string ingredient) =>
+        GetAsync<MealDbFilterResponse>(
+            $"{BaseUrl}/filter.php?i={Uri.EscapeDataString(ingredient)}",
+            cacheKey: $"mealdb:filter:i:{ingredient.ToLowerInvariant()}",
+            ttl: FilterTtl);
 
     /// <summary>Full recipe detail with up to 20 ingredient/measure pairs and instructions.</summary>
-    public async Task<MealDbLookupResponse?> LookupAsync(string mealId)
-    {
-        var url = $"{BaseUrl}/lookup.php?i={Uri.EscapeDataString(mealId)}";
-        return await _http.GetFromJsonAsync<MealDbLookupResponse>(url);
-    }
+    public Task<MealDbLookupResponse?> LookupAsync(string mealId) =>
+        GetAsync<MealDbLookupResponse>(
+            $"{BaseUrl}/lookup.php?i={Uri.EscapeDataString(mealId)}",
+            cacheKey: $"mealdb:lookup:{mealId}",
+            ttl: LookupTtl);
 
     /// <summary>List all available recipe categories.</summary>
-    public async Task<MealDbCategoriesResponse?> GetCategoriesAsync()
+    public Task<MealDbCategoriesResponse?> GetCategoriesAsync() =>
+        GetAsync<MealDbCategoriesResponse>(
+            $"{BaseUrl}/categories.php",
+            cacheKey: "mealdb:categories",
+            ttl: CategoriesTtl);
+
+    /// <summary>Get a random recipe ("Surprise Me") — uncached.</summary>
+    public Task<MealDbLookupResponse?> GetRandomAsync() =>
+        GetAsync<MealDbLookupResponse>($"{BaseUrl}/random.php");
+
+    private async Task<T?> GetAsync<T>(string url, string? cacheKey = null, TimeSpan? ttl = null)
     {
-        var url = $"{BaseUrl}/categories.php";
-        return await _http.GetFromJsonAsync<MealDbCategoriesResponse>(url);
+        if (cacheKey != null && ttl.HasValue && _cache.TryGetValue<T>(cacheKey, out var cached) && cached is not null)
+            return cached;
+
+        var result = await GetWithRetryAsync<T>(url);
+
+        if (cacheKey != null && ttl.HasValue && result is not null)
+            _cache.Set(cacheKey, result, ttl.Value);
+
+        return result;
     }
 
-    /// <summary>Get a random recipe ("Surprise Me").</summary>
-    public async Task<MealDbLookupResponse?> GetRandomAsync()
+    /// <summary>Fetch with a single retry on transient upstream failures.</summary>
+    private async Task<T?> GetWithRetryAsync<T>(string url)
     {
-        var url = $"{BaseUrl}/random.php";
-        return await _http.GetFromJsonAsync<MealDbLookupResponse>(url);
+        const int maxAttempts = 2;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                return await _http.GetFromJsonAsync<T>(url);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogWarning(ex, "MealDB request failed (attempt {Attempt}/{Max}): {Url} (status {Status})",
+                    attempt, maxAttempts, url, ex.StatusCode);
+                if (attempt >= maxAttempts) throw;
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogWarning(ex, "MealDB request timed out (attempt {Attempt}/{Max}): {Url}",
+                    attempt, maxAttempts, url);
+                if (attempt >= maxAttempts) throw;
+            }
+        }
+
+        return default; // unreachable — the final attempt rethrows above
     }
 }
 

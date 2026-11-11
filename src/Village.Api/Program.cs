@@ -62,7 +62,15 @@ builder.Services.AddHttpClient<AppleIapService>();
 builder.Services.AddHttpClient<GooglePlayService>();
 
 // Recipe ideas — TheMealDB proxy (free, no API key)
-builder.Services.AddHttpClient<MealDbService>();
+// Explicit timeout well under the client's own timeout, so a hung upstream can't
+// hold a request (and its connection) for the default 100 s.
+builder.Services.AddHttpClient<MealDbService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(8);
+});
+
+// In-memory cache backing TheMealDB's near-static endpoints (categories, filters, lookups).
+builder.Services.AddMemoryCache();
 
 // Carter modules
 builder.Services.AddCarter();
