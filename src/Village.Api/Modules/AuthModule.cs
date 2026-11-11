@@ -51,8 +51,11 @@ public class AuthModule : ICarterModule
             }
             else
             {
+                // Invite codes are generated from an uppercase-only alphabet; normalize
+                // the lookup so lowercase entry points (API/web) still match.
+                var inviteCode = request.InviteCode.Trim().ToUpperInvariant();
                 var existing = await db.Families
-                    .FirstOrDefaultAsync(f => f.InviteCode == request.InviteCode.Trim(), ct);
+                    .FirstOrDefaultAsync(f => f.InviteCode == inviteCode, ct);
                 if (existing == null)
                     return Results.BadRequest(new { error = "Invalid invite code" });
                 family = existing;
