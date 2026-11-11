@@ -225,15 +225,29 @@ public class CalendarEventsModule : ICarterModule
                     if (!await db.Users.AnyAsync(u => u.Id == attendeeId && u.FamilyId == familyId.Value, ct))
                         return Results.BadRequest(new { error = $"Attendee {attendeeId} is not in your family." });
                 }
-                db.CalendarEventAttendees.RemoveRange(evt.Attendees);
+
+                // Diff the attendee set instead of deleting and recreating every row, so
+                // attendees who remain keep their existing RSVP status.
+                var requestedIds = request.AttendeeIds.ToHashSet();
+                var existingIds = evt.Attendees.Select(a => a.UserId).ToHashSet();
+
+                foreach (var existing in evt.Attendees.ToList())
+                {
+                    if (!requestedIds.Contains(existing.UserId))
+                        db.CalendarEventAttendees.Remove(existing);
+                }
+
                 foreach (var attendeeId in request.AttendeeIds)
                 {
-                    evt.Attendees.Add(new CalendarEventAttendee
+                    if (!existingIds.Contains(attendeeId))
                     {
-                        EventId = evt.Id,
-                        UserId = attendeeId,
-                        Status = AttendeeStatus.Pending
-                    });
+                        db.CalendarEventAttendees.Add(new CalendarEventAttendee
+                        {
+                            EventId = evt.Id,
+                            UserId = attendeeId,
+                            Status = AttendeeStatus.Pending
+                        });
+                    }
                 }
             }
 
